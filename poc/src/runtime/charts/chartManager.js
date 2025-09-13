@@ -190,12 +190,8 @@ export class ChartManager {
     const chart = this.charts.get(chartId);
     if (!chart) return;
 
-    // 计算活跃度并排序
-    const scored = data.map(store => ({
-      ...store,
-      activity: this.calculateWeightedScore(store, weights)
-    }));
-
+    // 直接使用传入的data，它已经包含activity字段
+    const scored = data.filter(store => store.activity !== null);
     scored.sort((a, b) => b.activity - a.activity);
 
     // 计算分位数颜色
@@ -427,13 +423,14 @@ export class ChartManager {
     `;
 
     if (data.features) {
+      const weights = paramManager.get('weights');
       const contributions = [
-        { name: '近端动量', value: data.features.momentum },
-        { name: '节日效应', value: data.features.holidayLift },
-        { name: '油价敏感度(-)', value: data.features.fuelSensitivity === null ? null : 1 - Math.abs(data.features.fuelSensitivity) },
-        { name: '气温敏感度(-)', value: data.features.tempSensitivity === null ? null : 1 - Math.abs(data.features.tempSensitivity) },
-        { name: '宏观敏感度(-)', value: data.features.macroAdaptation === null ? null : 1 - Math.abs(data.features.macroAdaptation) },
-        { name: '稳健趋势', value: data.features.trend }
+        { name: '近端动量', value: data.features.momentum, weight: weights.momentum },
+        { name: '节日效应', value: data.features.holidayLift, weight: weights.holiday },
+        { name: '油价敏感度(-)', value: data.features.fuelSensitivity === null ? null : 1 - Math.abs(data.features.fuelSensitivity), weight: weights.fuel },
+        { name: '气温敏感度(-)', value: data.features.tempSensitivity === null ? null : 1 - Math.abs(data.features.tempSensitivity), weight: weights.temperature },
+        { name: '宏观敏感度(-)', value: data.features.macroAdaptation === null ? null : 1 - data.features.macroAdaptation, weight: weights.macro },
+        { name: '稳健趋势', value: data.features.trend, weight: weights.trend }
       ];
 
       contributions.forEach(c => {
@@ -445,11 +442,12 @@ export class ChartManager {
             </div>
           `;
         } else {
-          const color = c.value > 0 ? '#5470c6' : '#ee6666';
+          const weightedValue = c.weight * c.value;
+          const color = weightedValue > 0 ? '#5470c6' : '#ee6666';
           html += `
             <div style="display: flex; justify-content: space-between; margin: 2px 0;">
               <span>${c.name}:</span>
-              <span style="color: ${color}">${c.value.toFixed(3)}</span>
+              <span style="color: ${color}">${weightedValue.toFixed(3)}</span>
             </div>
           `;
         }
@@ -473,16 +471,42 @@ export class ChartManager {
   async formatScatterTooltip(params) {
     const data = params.data;
 
+    // 计算Share_t（当周该店销售额占当周总销售额的比例）
+    const weekTotal = this.getCurrentWeekTotalSum(data.date);
+    const share = weekTotal > 0 ? (data.weeklySales / weekTotal * 100).toFixed(2) : 0;
+
+    // 计算WoW和YoY
+    const prevWeekData = dataProcessor.rawData.find(r =>
+      r.store === data.store &&
+      Math.abs(r.dateObj - new Date(data.dateObj.getTime() - 7 * 24 * 60 * 60 * 1000)) < 24 * 60 * 60 * 1000
+    );
+    const prevYearData = dataProcessor.rawData.find(r =>
+      r.store === data.store &&
+      r.year === data.year - 1 &&
+      r.week === data.week
+    );
+
+    const wow = prevWeekData ? ((data.weeklySales - prevWeekData.weeklySales) / prevWeekData.weeklySales * 100).toFixed(1) : null;
+    const yoy = prevYearData ? ((data.weeklySales - prevYearData.weeklySales) / prevYearData.weeklySales * 100).toFixed(1) : null;
+
     // 获取迷你图数据
     const miniSeriesHtml = await this.createMiniSparkline(data);
+
+    // 判断节日标记（节日本周+前一周）
+    const holidayMark = data.holidayFlag || data.isHolidayWeek || data.isPreHolidayWeek;
 
     const html = `
       <div style="padding: 10px; min-width: 300px;">
         <div style="font-weight: bold;">Store ${data.store} - Week ${data.weekOfYear}</div>
         <div>销售额: ${this.formatNumber(data.weeklySales)}</div>
-        <div>温度: ${data.temperature}°F</div>
-        <div>油价: $${data.fuelPrice}</div>
-        ${data.holidayFlag ? '<div style="color: #ff6b6b;">🎄 节日周</div>' : ''}
+        <div>占比(Share_t): ${share}%</div>
+        ${wow !== null ? `<div>周环比(WoW): ${wow > 0 ? '+' : ''}${wow}%</div>` : ''}
+        ${yoy !== null ? `<div>年同比(YoY): ${yoy > 0 ? '+' : ''}${yoy}%</div>` : ''}
+        <div style="margin-top: 5px;">
+          <div>温度: ${data.temperature}°F</div>
+          <div>油价: $${data.fuelPrice}</div>
+        </div>
+        ${holidayMark ? '<div style="color: #ff6b6b; margin-top: 5px;">🎄 节日周</div>' : ''}
         <div style="margin-top: 10px;">
           <div style="font-size: 12px; color: #666;">近8周趋势:</div>
           ${miniSeriesHtml}
@@ -577,18 +601,6 @@ export class ChartManager {
   }
 
   // 辅助函数
-  calculateWeightedScore(store, weights) {
-    if (!store.features) return 0;
-
-    const f = store.features;
-    return weights.momentum * (f.momentum || 0) +
-      weights.holiday * (f.holidayLift || 0) +
-      weights.fuel * (1 - Math.abs(f.fuelSensitivity || 0)) +
-      weights.temperature * (1 - Math.abs(f.tempSensitivity || 0)) +
-      weights.macro * (f.macroAdaptation || 0) +
-      weights.trend * (f.trend || 0);
-  }
-
   getActivityColor(value) {
     const colors = ['#ee6666', '#fac858', '#91cc75', '#5470c6'];
     if (value < -0.5) return colors[0];

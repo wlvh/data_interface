@@ -6,7 +6,7 @@ import { dataProcessor } from './runtime/dataProcessor.js';
 import { chartManager } from './runtime/charts/chartManager.js';
 import { paramManager } from './runtime/params/manager.js';
 import { ParameterPanel } from './ui/panels/parameterPanel.js';
-import Papa from 'papaparse';
+import { runSlot } from './runtime/worker/sandbox.js';
 
 class DataInterfaceApp {
   constructor() {
@@ -213,68 +213,82 @@ class DataInterfaceApp {
       return;
     }
 
-    // 计算聚合统计
-    const stats = this.calculateAggregateStats(selectedPoints);
+    // 使用Worker槽位计算聚合统计
+    const aggregateCode = `
+      const values = input.points.map(p => p.weeklySales || p.value[1]);
+      const count = input.points.length;
+      const sum = utils.sum(values);
+      const mean = utils.mean(values);
+      const median = utils.median(values);
+      const stdev = utils.stdev(values);
 
-    // 显示统计卡片
-    this.displayAggregateCard(stats);
-  }
+      // 计算占比（基于筛选后的总和）
+      const share = params.totalSum > 0 ? sum / params.totalSum : 0;
 
-  /**
-   * 计算聚合统计
-   */
-  calculateAggregateStats(points) {
-    const values = points.map(p => p.weeklySales || p.value[1]);
+      // 计算局部斜率（样本充足才计算）
+      let slope = null;
+      if (count >= 5) {
+        const xValues = input.points.map(p => p[params.xField] || p.value[0]);
+        const meanX = utils.mean(xValues);
+        const meanY = mean;
+        let numerator = 0;
+        let denominator = 0;
 
-    const sum = values.reduce((a, b) => a + b, 0);
-    const mean = sum / values.length;
+        for (let i = 0; i < count; i++) {
+          numerator += (xValues[i] - meanX) * (values[i] - meanY);
+          denominator += (xValues[i] - meanX) * (xValues[i] - meanX);
+        }
 
-    const sorted = [...values].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)];
+        slope = denominator === 0 ? 0 : numerator / denominator;
+      }
 
-    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
-    const stdev = Math.sqrt(variance);
+      return {
+        count,
+        sum,
+        mean,
+        median,
+        stdev,
+        share,
+        slope
+      };
+    `;
 
-    // 计算占比
-    const totalSum = this.data.reduce((sum, d) => sum + d.weeklySales, 0);
-    const share = sum / totalSum;
+    try {
+      // 获取当前筛选上下文的总和
+      const filteredData = this.data; // 这里应该基于当前筛选条件
+      const totalSum = filteredData.reduce((sum, d) => sum + d.weeklySales, 0);
+      const xField = paramManager.get('scatter.xField');
 
-    // 计算局部斜率（如果有足够的点）
-    let slope = null;
-    if (points.length >= 5) {
-      const xValues = points.map(p => p[paramManager.get('scatter.xField')] || p.value[0]);
-      const yValues = values;
-      slope = this.calculateSlope(xValues, yValues);
+      const result = await runSlot(
+        'aggregate',
+        aggregateCode,
+        { points: selectedPoints },
+        { totalSum, xField },
+        {
+          timeout: 1000,
+          outputSchema: {
+            type: 'object',
+            properties: {
+              count: {},
+              sum: {},
+              mean: {},
+              median: {},
+              stdev: {},
+              share: {},
+              slope: { optional: true }
+            }
+          }
+        }
+      );
+
+      if (result.ok) {
+        this.displayAggregateCard(result.data);
+      } else {
+        console.error('聚合计算失败:', result.error);
+      }
+    } catch (error) {
+      console.error('Worker执行失败:', error);
     }
-
-    return {
-      count: points.length,
-      sum,
-      mean,
-      median,
-      stdev,
-      share,
-      slope
-    };
-  }
-
-  /**
-   * 计算斜率
-   */
-  calculateSlope(x, y) {
-    const n = x.length;
-    const meanX = x.reduce((a, b) => a + b, 0) / n;
-    const meanY = y.reduce((a, b) => a + b, 0) / n;
-
-    let numerator = 0;
-    let denominator = 0;
-
-    for (let i = 0; i < n; i++) {
-      numerator += (x[i] - meanX) * (y[i] - meanY);
-      denominator += Math.pow(x[i] - meanX, 2);
-    }
-
-    return denominator === 0 ? 0 : numerator / denominator;
   }
 
   /**

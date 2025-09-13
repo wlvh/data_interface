@@ -5,6 +5,7 @@
 import { mean, median } from 'd3-array';
 import { timeParse } from 'd3-time-format';
 import { validateDataRow } from '../contract/schema.js';
+import { paramManager } from './params/manager.js';
 
 // 节日日期映射（2010-2012）
 const HOLIDAYS = {
@@ -43,9 +44,19 @@ export class DataProcessor {
    * 加载和解析CSV数据
    */
   async loadData(csvContent) {
-    const parseYMD = timeParse('%Y-%m-%d');
-    const parseDMY = timeParse('%d-%m-%Y');
-    const parseDate = (s) => parseYMD(s) || parseDMY(s) || null;
+    // 使用UTC时间解析
+    const parseDate = (dateStr) => {
+      // 支持 YYYY-MM-DD 和 DD-MM-YYYY 格式
+      let parts;
+      if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        parts = dateStr.split('-');
+        return new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
+      } else if (dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+        parts = dateStr.split('-');
+        return new Date(Date.UTC(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0])));
+      }
+      return null;
+    };
     const lines = csvContent.trim().split('\n');
     const headers = lines[0].split(',');
 
@@ -152,7 +163,10 @@ export class DataProcessor {
   /**
    * 计算近端动量
    */
-  calculateMomentum(storeData, window = 8) {
+  calculateMomentum(storeData, window = null) {
+    if (window === null) {
+      window = paramManager.get('timeWindow.weeks') || 8;
+    }
     const momentum = [];
 
     for (let i = 0; i < storeData.length; i++) {
@@ -170,7 +184,7 @@ export class DataProcessor {
   }
 
   /**
-   * 计算节日提升（对数差）
+   * 计算节日提升（线性差）
    */
   calculateHolidayLift(storeData) {
     const lift = [];
@@ -180,9 +194,9 @@ export class DataProcessor {
       const prev = i > 0 ? storeData[i - 1] : null;
 
       if (current.isHolidayWeek || current.isPreHolidayWeek) {
-        if (prev && prev.weeklySales > 0 && current.weeklySales > 0) {
-          // 使用对数差更稳健
-          lift.push(Math.log1p(current.weeklySales) - Math.log1p(prev.weeklySales));
+        if (prev && prev.weeklySales !== null && current.weeklySales !== null) {
+          // 使用线性差：HOL = Sales_t - Sales_{t-1}
+          lift.push(current.weeklySales - prev.weeklySales);
         } else {
           lift.push(null);
         }
@@ -197,7 +211,10 @@ export class DataProcessor {
   /**
    * 计算油价敏感度（滚动回归）
    */
-  calculateFuelSensitivity(storeData, window = 26) {
+  calculateFuelSensitivity(storeData, window = null) {
+    if (window === null) {
+      window = paramManager.get('timeWindow.rollingWindow') || 26;
+    }
     const sensitivity = [];
 
     for (let i = 0; i < storeData.length; i++) {
@@ -219,7 +236,10 @@ export class DataProcessor {
   /**
    * 计算气温敏感度（滚动回归）
    */
-  calculateTempSensitivity(storeData, window = 26) {
+  calculateTempSensitivity(storeData, window = null) {
+    if (window === null) {
+      window = paramManager.get('timeWindow.rollingWindow') || 26;
+    }
     const sensitivity = [];
 
     for (let i = 0; i < storeData.length; i++) {
@@ -239,9 +259,12 @@ export class DataProcessor {
   }
 
   /**
-   * 计算宏观敏感度（惩罚项）
+   * 计算宏观敏感度（MACRO_abs）
    */
-  calculateMacroAdaptation(storeData, window = 26) {
+  calculateMacroAdaptation(storeData, window = null) {
+    if (window === null) {
+      window = paramManager.get('timeWindow.rollingWindow') || 26;
+    }
     const adaptation = [];
 
     for (let i = 0; i < storeData.length; i++) {
@@ -250,19 +273,19 @@ export class DataProcessor {
       } else {
         const windowData = storeData.slice(i - window + 1, i + 1);
 
-        // 计算与失业率的负相关
+        // 计算与失业率的相关系数绝对值
         const corrUnemployment = Math.abs(this.correlation(
           windowData.map(d => d.weeklySales),
-          windowData.map(d => -d.unemployment)
+          windowData.map(d => d.unemployment)
         ));
 
-        // 计算与CPI的负相关
+        // 计算与CPI的相关系数绝对值
         const corrCPI = Math.abs(this.correlation(
           windowData.map(d => d.weeklySales),
-          windowData.map(d => -d.cpi)
+          windowData.map(d => d.cpi)
         ));
 
-        // 定义为"宏观敏感度强度"（越大越敏感→惩罚项）
+        // MACRO_abs = mean(|corr(Sales, Unemployment)|, |corr(Sales, CPI)|)
         adaptation.push((corrUnemployment + corrCPI) / 2);
       }
     }
@@ -273,7 +296,10 @@ export class DataProcessor {
   /**
    * 计算稳健趋势
    */
-  calculateTrend(storeData, window = 8) {
+  calculateTrend(storeData, window = null) {
+    if (window === null) {
+      window = paramManager.get('timeWindow.weeks') || 8;
+    }
     const trends = [];
 
     for (let i = 0; i < storeData.length; i++) {
@@ -333,31 +359,36 @@ export class DataProcessor {
   }
 
   /**
-   * 计算活跃度评分（权重重标）
+   * 计算活跃度评分（一票否决）
    */
   calculateActivityScore(row, weights) {
-    if (!row.features) return 0;
+    if (!row.features) return null;
 
     const f = row.features;
 
-    // 将null视为"不可用"并做有效权重重标
+    // NA传播规则：任一特征为NA，则Activity=NA
     const terms = [
       { w: weights.momentum, v: f.momentum },
       { w: weights.holiday, v: f.holidayLift },
       { w: weights.fuel, v: (f.fuelSensitivity === null ? null : 1 - Math.abs(f.fuelSensitivity)) },
       { w: weights.temperature, v: (f.tempSensitivity === null ? null : 1 - Math.abs(f.tempSensitivity)) },
-      // 宏观敏感度为惩罚项：1 - |z|
-      { w: weights.macro, v: (f.macroAdaptation === null ? null : 1 - Math.abs(f.macroAdaptation)) },
+      // 宏观敏感度：使用 1 - z(MACRO_abs) 而非 1 - |z|
+      { w: weights.macro, v: (f.macroAdaptation === null ? null : 1 - f.macroAdaptation) },
       { w: weights.trend, v: f.trend }
     ];
 
-    // 筛选有效项
-    const eff = terms.filter(t => t.v !== null && Number.isFinite(t.v) && t.w > 0);
-    if (!eff.length) return 0;
+    // 一票否决：任一参与项为NA → 返回NA
+    for (const term of terms) {
+      if (term.w > 0 && (term.v === null || !Number.isFinite(term.v))) {
+        return null;
+      }
+    }
 
-    // 重标权重
-    const sumW = eff.reduce((s, t) => s + t.w, 0);
-    return eff.reduce((s, t) => s + (t.w / sumW) * t.v, 0);
+    // 计算加权平均
+    const sumW = terms.reduce((s, t) => s + t.w, 0);
+    if (sumW === 0) return null;
+
+    return terms.reduce((s, t) => s + (t.w / sumW) * t.v, 0);
   }
 
   /**
@@ -408,25 +439,25 @@ export class DataProcessor {
   }
 
   /**
-   * 获取ISO周
+   * 获取ISO周（基于UTC）
    */
   getISOWeek(date) {
-    const target = new Date(date.valueOf());
-    const dayNum = (date.getDay() + 6) % 7;
-    target.setDate(target.getDate() - dayNum + 3);
+    const target = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    const dayNum = (target.getUTCDay() + 6) % 7;
+    target.setUTCDate(target.getUTCDate() - dayNum + 3);
     const firstThursday = target.valueOf();
-    target.setMonth(0, 1);
-    if (target.getDay() !== 4) {
-      target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+    target.setUTCMonth(0, 1);
+    if (target.getUTCDay() !== 4) {
+      target.setUTCMonth(0, 1 + ((4 - target.getUTCDay()) + 7) % 7);
     }
     return 1 + Math.ceil((firstThursday - target) / 604800000);
   }
 
   /**
-   * 获取年内周数
+   * 获取年内周数（基于UTC）
    */
   getWeekOfYear(date) {
-    const start = new Date(date.getFullYear(), 0, 1);
+    const start = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
     const diff = date - start;
     const oneWeek = 1000 * 60 * 60 * 24 * 7;
     return Math.floor(diff / oneWeek) + 1;
@@ -506,20 +537,34 @@ export class DataProcessor {
    */
   getStoreRecentWeeks(storeId, date, weeks = 8) {
     const storeData = this.rawData.filter(r => r.store === storeId);
-    const targetDate = typeof date === 'string' ? new Date(date) : date;
+    const targetDate = typeof date === 'string' ? this.parseUTCDate(date) : date;
 
     // 按日期排序
     storeData.sort((a, b) => a.dateObj - b.dateObj);
 
-    // 找到目标日期的索引
+    // 使用年-周键匹配
+    const targetYear = targetDate.getUTCFullYear();
+    const targetWeek = this.getISOWeek(targetDate);
+
     const targetIndex = storeData.findIndex(r =>
-      Math.abs(r.dateObj - targetDate) < 7 * 24 * 60 * 60 * 1000
+      r.year === targetYear && r.week === targetWeek
     );
 
     if (targetIndex === -1) return [];
 
     const startIndex = Math.max(0, targetIndex - weeks + 1);
     return storeData.slice(startIndex, targetIndex + 1);
+  }
+
+  /**
+   * 解析UTC日期
+   */
+  parseUTCDate(dateStr) {
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const parts = dateStr.split('-');
+      return new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
+    }
+    return new Date(dateStr + 'T00:00:00Z');
   }
 }
 

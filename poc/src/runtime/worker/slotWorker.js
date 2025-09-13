@@ -141,6 +141,7 @@ self.onmessage = (e) => {
   // 构建安全的执行环境
   const wrapped = `
     'use strict';
+    const _Math = globalThis.Math;
     const window = undefined;
     const document = undefined;
     const globalThis = undefined;
@@ -151,22 +152,22 @@ self.onmessage = (e) => {
     const WebSocket = undefined;
     const Date = undefined;
     const Math = Object.freeze({
-      abs: Math.abs,
-      floor: Math.floor,
-      ceil: Math.ceil,
-      round: Math.round,
-      min: Math.min,
-      max: Math.max,
-      pow: Math.pow,
-      sqrt: Math.sqrt,
-      log: Math.log,
-      log1p: Math.log1p || (x => Math.log(1 + x)),
-      exp: Math.exp,
-      sin: Math.sin,
-      cos: Math.cos,
-      tan: Math.tan,
-      PI: Math.PI,
-      E: Math.E
+      abs: _Math.abs,
+      floor: _Math.floor,
+      ceil: _Math.ceil,
+      round: _Math.round,
+      min: _Math.min,
+      max: _Math.max,
+      pow: _Math.pow,
+      sqrt: _Math.sqrt,
+      log: _Math.log,
+      log1p: _Math.log1p || (x => _Math.log(1 + x)),
+      exp: _Math.exp,
+      sin: _Math.sin,
+      cos: _Math.cos,
+      tan: _Math.tan,
+      PI: _Math.PI,
+      E: _Math.E
     });
 
     return (function(input, params, utils) {
