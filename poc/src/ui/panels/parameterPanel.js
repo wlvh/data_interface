@@ -209,10 +209,8 @@ export class ParameterPanel {
     const selectId = event.target.id;
     const value = event.target.value;
 
-    // 转换类型
-    const numValue = isNaN(value) ? value : Number(value);
-
-    paramManager.set(selectId, numValue);
+    // 简化类型转换 - 直接使用Number()，参数验证逻辑会处理NaN
+    paramManager.set(selectId, Number(value));
     this.triggerChartUpdate(selectId);
   }
 

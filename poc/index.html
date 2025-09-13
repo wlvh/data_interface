@@ -5,6 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>数据接口POC - 动态权重与交互可视化</title>
   <style>
+    :root {
+      /* 主色调 */
+      --primary-color: #007bff;
+      --primary-hover: #0056b3;
+      --secondary-color: #6c757d;
+      --secondary-hover: #5a6268;
+
+      /* 边框和背景 */
+      --border-color: #e1e4e8;
+      --bg-light: #f5f7fa;
+      --bg-white: white;
+      --bg-gray: #f0f0f0;
+
+      /* 文字颜色 */
+      --text-primary: #333;
+      --text-secondary: #666;
+      --text-heading: #2c3e50;
+      --text-muted: #495057;
+
+      /* 间距 */
+      --spacing-sm: 8px;
+      --spacing-md: 15px;
+      --spacing-lg: 20px;
+      --spacing-xl: 25px;
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -13,8 +39,8 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #f5f7fa;
-      color: #333;
+      background: var(--bg-light);
+      color: var(--text-primary);
     }
 
     .app-container {
@@ -26,25 +52,25 @@
     /* 左侧参数面板 */
     .left-panel {
       width: 320px;
-      background: white;
-      border-right: 1px solid #e1e4e8;
+      background: var(--bg-white);
+      border-right: 1px solid var(--border-color);
       overflow-y: auto;
-      padding: 20px;
+      padding: var(--spacing-lg);
     }
 
     .panel-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid #f0f0f0;
+      margin-bottom: var(--spacing-lg);
+      padding-bottom: var(--spacing-md);
+      border-bottom: 2px solid var(--bg-gray);
     }
 
     .panel-header h3 {
       font-size: 18px;
       font-weight: 600;
-      color: #2c3e50;
+      color: var(--text-heading);
     }
 
     .btn {
@@ -57,21 +83,21 @@
     }
 
     .btn-secondary {
-      background: #6c757d;
+      background: var(--secondary-color);
       color: white;
     }
 
     .btn-secondary:hover {
-      background: #5a6268;
+      background: var(--secondary-hover);
     }
 
     .btn-primary {
-      background: #007bff;
+      background: var(--primary-color);
       color: white;
     }
 
     .btn-primary:hover {
-      background: #0056b3;
+      background: var(--primary-hover);
     }
 
     /* 参数组 */
