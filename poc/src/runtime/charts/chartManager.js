@@ -190,9 +190,13 @@ export class ChartManager {
     const chart = this.charts.get(chartId);
     if (!chart) return;
 
-    // 直接使用传入的data，它已经包含activity字段
-    const scored = data.filter(store => store.activity !== null);
-    scored.sort((a, b) => b.activity - a.activity);
+    // 处理activity为null的情况，显示为0或标记为N/A
+    const scored = data.map(store => ({
+      ...store,
+      activity: store.activity !== null ? store.activity : 0,
+      isNA: store.activity === null
+    }));
+    scored.sort((a, b) => (b.activity || 0) - (a.activity || 0));
 
     // 计算分位数颜色
     const activities = scored.map(s => s.activity);

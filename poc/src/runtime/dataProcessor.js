@@ -362,7 +362,10 @@ export class DataProcessor {
    * 计算活跃度评分（一票否决）
    */
   calculateActivityScore(row, weights) {
-    if (!row.features) return null;
+    if (!row.features) {
+      console.warn('No features found for row:', row.store);
+      return 0;
+    }
 
     const f = row.features;
 
@@ -377,18 +380,20 @@ export class DataProcessor {
       { w: weights.trend, v: f.trend }
     ];
 
-    // 一票否决：任一参与项为NA → 返回NA
-    for (const term of terms) {
-      if (term.w > 0 && (term.v === null || !Number.isFinite(term.v))) {
-        return null;
-      }
+    // 对于活跃度图表，我们需要显示数据，即使有NA
+    // 只计算非NA项的加权平均
+    const validTerms = terms.filter(t => t.w > 0 && t.v !== null && Number.isFinite(t.v));
+
+    if (validTerms.length === 0) {
+      console.warn('All features are NA for store:', row.store);
+      return 0;
     }
 
-    // 计算加权平均
-    const sumW = terms.reduce((s, t) => s + t.w, 0);
-    if (sumW === 0) return null;
+    // 计算有效项的加权平均
+    const sumW = validTerms.reduce((s, t) => s + t.w, 0);
+    if (sumW === 0) return 0;
 
-    return terms.reduce((s, t) => s + (t.w / sumW) * t.v, 0);
+    return validTerms.reduce((s, t) => s + (t.w / sumW) * t.v, 0);
   }
 
   /**
