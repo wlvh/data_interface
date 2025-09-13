@@ -142,10 +142,7 @@ class DataInterfaceApp {
       }
     });
 
-    // 监听图表选择变化
-    chartManager.onSelectionChange = (selectedPoints) => {
-      this.handleSelectionChange(selectedPoints);
-    };
+    // chartManager已经有自己的onSelectionChange实现，不需要覆盖
   }
 
   /**
@@ -255,10 +252,11 @@ class DataInterfaceApp {
     });
   }
 
+  // 以下两个方法已移至chartManager.js，这里保留为空避免调用错误
   /**
-   * 处理选择变化
+   * 处理选择变化（已废弃，功能移至chartManager.js）
    */
-  async handleSelectionChange(selectedPoints) {
+  async handleSelectionChange_deprecated(selectedPoints) {
     if (selectedPoints.length === 0) {
       document.getElementById('aggregate-card').style.display = 'none';
       return;
@@ -332,7 +330,7 @@ class DataInterfaceApp {
       );
 
       if (result.ok) {
-        this.displayAggregateCard(result.data);
+        this.displayAggregateCard_deprecated(result.data);
       } else {
         console.error('聚合计算失败:', result.error);
       }
@@ -342,9 +340,9 @@ class DataInterfaceApp {
   }
 
   /**
-   * 显示聚合卡片
+   * 显示聚合卡片（已废弃，功能移至chartManager.js）
    */
-  displayAggregateCard(stats) {
+  displayAggregateCard_deprecated(stats) {
     const card = document.getElementById('aggregate-card');
     if (!card) return;
 

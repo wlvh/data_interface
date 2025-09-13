@@ -246,6 +246,9 @@ export class ChartManager {
     // 颜色映射
     const colorMap = this.createColorMap(data, colorField);
 
+    // 生成并显示门店颜色图例
+    this.displayStoreLegend(data, colorField, colorMap);
+
     // 更新图表
     chart.setOption({
       xAxis: {
@@ -261,6 +264,9 @@ export class ChartManager {
         }
       }]
     });
+
+    // 先移除旧的监听器，避免重复绑定
+    chart.off('brushEnd');
 
     // 监听圈选事件
     chart.on('brushEnd', (params) => {
@@ -296,6 +302,7 @@ export class ChartManager {
    * 选择变化回调
    */
   async onSelectionChange(selectedPoints) {
+    console.log('onSelectionChange called with', selectedPoints.length, 'points');
     if (selectedPoints.length === 0) return;
 
     // 调用聚合函数槽位
@@ -360,8 +367,12 @@ export class ChartManager {
       }
     );
 
+    console.log('runSlot result:', result);
     if (result.ok) {
       this.displayAggregateCard(result.data);
+    } else {
+      console.error('runSlot failed with error:', result.error);
+      console.error('Error details:', JSON.stringify(result.error, null, 2));
     }
   }
 
@@ -369,8 +380,12 @@ export class ChartManager {
    * 显示聚合卡片
    */
   displayAggregateCard(stats) {
+    console.log('displayAggregateCard called with stats:', stats);
     const card = document.getElementById('aggregate-card');
-    if (!card) return;
+    if (!card) {
+      console.error('aggregate-card element not found');
+      return;
+    }
 
     card.innerHTML = `
       <div class="card-header">选中区域统计</div>
@@ -409,6 +424,33 @@ export class ChartManager {
     `;
 
     card.style.display = 'block';
+  }
+
+  /**
+   * 显示门店颜色图例
+   */
+  displayStoreLegend(data, colorField, colorMap) {
+    const legendCard = document.getElementById('legend-card');
+    const legendBody = document.getElementById('legend-body');
+    if (!legendCard || !legendBody) return;
+
+    // 获取唯一的门店ID并排序
+    const uniqueStores = [...new Set(data.map(d => d[colorField]))].sort((a, b) => a - b);
+
+    // 生成图例HTML
+    let legendHTML = '';
+    uniqueStores.forEach(storeId => {
+      const color = colorMap.get(storeId);
+      legendHTML += `
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: ${color}"></div>
+          <span>Store ${storeId}</span>
+        </div>
+      `;
+    });
+
+    legendBody.innerHTML = legendHTML;
+    legendCard.style.display = 'block';
   }
 
   /**

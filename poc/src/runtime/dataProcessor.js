@@ -252,19 +252,24 @@ export class DataProcessor {
     const winSize = window ?? paramManager.get('timeWindow.rollingWindow') ?? 26;
     return this._calculateRollingFeature(storeData, winSize, (winData) => {
       // 计算与失业率的相关系数绝对值
-      const corrUnemployment = Math.abs(this.correlation(
+      const corrUnemployment = this.correlation(
         winData.map(d => d.weeklySales),
         winData.map(d => d.unemployment)
-      ));
+      );
 
       // 计算与CPI的相关系数绝对值
-      const corrCPI = Math.abs(this.correlation(
+      const corrCPI = this.correlation(
         winData.map(d => d.weeklySales),
         winData.map(d => d.cpi)
-      ));
+      );
+
+      // 如果任一相关系数为null（样本不足），返回null
+      if (corrUnemployment === null || corrCPI === null) {
+        return null;
+      }
 
       // MACRO_abs = mean(|corr(Sales, Unemployment)|, |corr(Sales, CPI)|)
-      return (corrUnemployment + corrCPI) / 2;
+      return (Math.abs(corrUnemployment) + Math.abs(corrCPI)) / 2;
     });
   }
 
@@ -386,8 +391,10 @@ export class DataProcessor {
           let value = row.features[name];
 
           // 特殊处理需要转换的特征
-          if (name === 'fuel' || name === 'temperature') {
-            value = row.features[name + 'Sensitivity'];
+          if (name === 'fuel') {
+            value = row.features.fuelSensitivity;
+          } else if (name === 'temperature') {
+            value = row.features.tempSensitivity;
           } else if (name === 'holiday') {
             value = row.features.holidayLift;
           } else if (name === 'macro') {
@@ -425,18 +432,26 @@ export class DataProcessor {
    * 简单线性回归
    */
   simpleRegression(x, y) {
-    const n = x.length;
-    if (n < 2) return 0;
+    // 清洗：仅保留成对有限数
+    const pairs = [];
+    for (let i = 0; i < x.length; i++) {
+      const xi = x[i], yi = y[i];
+      if (Number.isFinite(xi) && Number.isFinite(yi)) pairs.push([xi, yi]);
+    }
+    const n = pairs.length;
+    if (n < 2) return null; // 样本不足，返回 null 让上层标记 NA
 
-    const meanX = mean(x);
-    const meanY = mean(y);
+    const xs = pairs.map(p => p[0]);
+    const ys = pairs.map(p => p[1]);
+    const meanX = mean(xs);
+    const meanY = mean(ys);
 
     let numerator = 0;
     let denominator = 0;
 
     for (let i = 0; i < n; i++) {
-      numerator += (x[i] - meanX) * (y[i] - meanY);
-      denominator += Math.pow(x[i] - meanX, 2);
+      numerator += (xs[i] - meanX) * (ys[i] - meanY);
+      denominator += Math.pow(xs[i] - meanX, 2);
     }
 
     return denominator === 0 ? 0 : numerator / denominator;
@@ -446,19 +461,27 @@ export class DataProcessor {
    * 计算相关系数
    */
   correlation(x, y) {
-    const n = x.length;
-    if (n < 2) return 0;
+    // 清洗：仅保留成对有限数
+    const pairs = [];
+    for (let i = 0; i < x.length; i++) {
+      const xi = x[i], yi = y[i];
+      if (Number.isFinite(xi) && Number.isFinite(yi)) pairs.push([xi, yi]);
+    }
+    const n = pairs.length;
+    if (n < 2) return null; // 样本不足，返回 null
 
-    const meanX = mean(x);
-    const meanY = mean(y);
+    const xs = pairs.map(p => p[0]);
+    const ys = pairs.map(p => p[1]);
+    const meanX = mean(xs);
+    const meanY = mean(ys);
 
     let cov = 0;
     let varX = 0;
     let varY = 0;
 
     for (let i = 0; i < n; i++) {
-      const dx = x[i] - meanX;
-      const dy = y[i] - meanY;
+      const dx = xs[i] - meanX;
+      const dy = ys[i] - meanY;
       cov += dx * dy;
       varX += dx * dx;
       varY += dy * dy;
