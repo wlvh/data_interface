@@ -37,36 +37,31 @@ const ALLOWED_STATEMENTS = [
 ];
 
 /**
- * 简单的AST解析和检查
- * 注意：生产环境应使用更完整的AST解析器
+ * 验证槽位代码安全性（主线程轻量级检查）
  */
 export function validateSlot(code) {
+  const forbidden = [
+    /constructor\s*\.\s*constructor/,
+    /__proto__/,
+    /\beval\s*\(/,
+    /\bnew\s+Function\b/,
+    /\bimport\s*\(/,
+    /\bfetch\b|\bXMLHttpRequest\b|\bWebSocket\b/
+  ];
+
   const errors = [];
 
-  // 检查黑名单标识符
-  for (const blacklisted of BLACKLISTED_IDENTIFIERS) {
-    // 使用正则表达式检查（简化版本）
-    const regex = new RegExp(`\\b${blacklisted}\\b`, 'g');
-    if (regex.test(code)) {
-      errors.push(`Blacklisted identifier found: ${blacklisted}`);
-    }
-  }
-
-  // 检查危险的语法
-  if (/new\s+Function/.test(code)) {
-    errors.push('Dynamic function creation not allowed');
-  }
-  if (/eval\s*\(/.test(code)) {
-    errors.push('eval() not allowed');
-  }
-  if (/import\s*\(/.test(code)) {
-    errors.push('Dynamic import not allowed');
-  }
-
-  // 检查是否有return语句
+  // 检查必须有return语句
   if (!/return\s+/.test(code)) {
     errors.push('Function must have a return statement');
   }
+
+  // 检查禁用模式
+  forbidden.forEach(re => {
+    if (re.test(code)) {
+      errors.push(`Forbidden pattern: ${re}`);
+    }
+  });
 
   return { ok: errors.length === 0, errors };
 }
@@ -165,130 +160,72 @@ function createSafeEnvironment() {
 }
 
 /**
- * 在沙箱中执行函数槽位
+ * Worker实例管理
+ */
+let _worker;
+
+function ensureWorker() {
+  if (_worker) return _worker;
+  const url = new URL('./slotWorker.js', import.meta.url);
+  _worker = new Worker(url, { type: 'module' });
+  return _worker;
+}
+
+/**
+ * 在Worker中安全执行函数槽位
  */
 export function runSlot(slotId, code, input, params, options = {}) {
-  const startTime = performance.now();
-  const timeout = options.timeout || 5000;
+  const worker = ensureWorker();
+  const timeout = options.timeout ?? 1000;
+  const outputSchema = options.outputSchema;
 
-  try {
-    // 验证代码
-    const validation = validateSlot(code);
-    if (!validation.ok) {
-      return {
-        ok: false,
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: validation.errors.join('; '),
-          phase: 'validation'
-        }
-      };
-    }
-
-    // 深度冻结输入
-    const frozenInput = deepFreeze(JSON.parse(JSON.stringify(input)));
-    const frozenParams = deepFreeze(JSON.parse(JSON.stringify(params)));
-
-    // 创建工具函数
-    const utils = createSafeEnvironment();
-
-    // 构建安全的执行函数
-    // 注意：生产环境应使用更安全的隔离方案
-    const wrappedCode = `
-      'use strict';
-      const window = undefined;
-      const document = undefined;
-      const globalThis = undefined;
-      const self = undefined;
-      const Function = undefined;
-      const eval = undefined;
-      const Date = undefined;
-      const Math = Object.freeze({
-        abs: Math.abs,
-        floor: Math.floor,
-        ceil: Math.ceil,
-        round: Math.round,
-        min: Math.min,
-        max: Math.max,
-        pow: Math.pow,
-        sqrt: Math.sqrt,
-        log: Math.log,
-        exp: Math.exp,
-        sin: Math.sin,
-        cos: Math.cos,
-        tan: Math.tan,
-        PI: Math.PI,
-        E: Math.E
-      });
-
-      return (function(input, params, utils) {
-        ${code}
-      })(input, params, utils);
-    `;
-
-    // 创建执行函数
-    const executor = new Function('input', 'params', 'utils', wrappedCode);
-
-    // 设置超时控制
-    let timeoutId;
-    const promise = new Promise((resolve, reject) => {
-      timeoutId = setTimeout(() => {
-        reject(new Error('Execution timeout'));
-      }, timeout);
-
+  return new Promise((resolve) => {
+    let timer = setTimeout(() => {
+      // 终止超时的Worker
       try {
-        const result = executor(frozenInput, frozenParams, utils);
-        resolve(result);
-      } catch (error) {
-        reject(error);
-      }
-    });
-
-    // 执行并获取结果
-    return promise.then(result => {
-      clearTimeout(timeoutId);
-      const execTime = performance.now() - startTime;
-
-      // 验证输出
-      const outputValidation = validateOutput(result, options.outputSchema);
-      if (!outputValidation.ok) {
-        return {
-          ok: false,
-          error: {
-            code: 'OUTPUT_VALIDATION_ERROR',
-            message: outputValidation.errors.join('; '),
-            phase: 'output'
-          }
-        };
-      }
-
-      return {
-        ok: true,
-        data: result,
-        exec_time_ms: execTime
-      };
-    }).catch(error => {
-      clearTimeout(timeoutId);
-      return {
+        worker.terminate();
+      } catch (_) {}
+      // 重新创建Worker
+      _worker = null;
+      resolve({
         ok: false,
         error: {
-          code: 'EXECUTION_ERROR',
-          message: error.message,
+          code: 'EXECUTION_TIMEOUT',
+          message: 'Execution timeout',
           phase: 'execution'
         }
-      };
-    });
+      });
+    }, timeout + 50);
 
-  } catch (error) {
-    return Promise.resolve({
-      ok: false,
-      error: {
-        code: 'SETUP_ERROR',
-        message: error.message,
-        phase: 'setup'
-      }
+    worker.onmessage = (e) => {
+      clearTimeout(timer);
+      resolve(e.data);
+    };
+
+    worker.onerror = (error) => {
+      clearTimeout(timer);
+      // Worker错误时重新创建
+      _worker = null;
+      resolve({
+        ok: false,
+        error: {
+          code: 'WORKER_ERROR',
+          message: error.message || 'Worker execution failed',
+          phase: 'execution'
+        }
+      });
+    };
+
+    // 发送任务到Worker
+    worker.postMessage({
+      slotId,
+      code,
+      input,
+      params,
+      outputSchema,
+      timeout
     });
-  }
+  });
 }
 
 /**

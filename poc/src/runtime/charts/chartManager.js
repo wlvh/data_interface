@@ -4,6 +4,8 @@
 
 import * as echarts from 'echarts';
 import { runSlot } from '../worker/sandbox.js';
+import { dataProcessor } from '../dataProcessor.js';
+import { paramManager } from '../params/manager.js';
 
 export class ChartManager {
   constructor() {
@@ -298,29 +300,20 @@ export class ChartManager {
       const stdev = utils.stdev(values);
 
       // 计算占比
-      const totalSum = params.totalSum || sum;
-      const share = sum / totalSum;
+      const share = params.totalSum > 0 ? sum / params.totalSum : 0;
 
-      // 计算局部斜率（可选）
+      // 计算局部斜率（样本充足才给）
       let slope = null;
-      if (input.points.length >= 5) {
-        const xValues = input.points.map(p => p.value[0]);
-        const yValues = input.points.map(p => p.value[1]);
-
-        // 简单线性回归
-        const n = xValues.length;
-        const meanX = utils.mean(xValues);
-        const meanY = utils.mean(yValues);
-
-        let numerator = 0;
-        let denominator = 0;
-
-        for (let i = 0; i < n; i++) {
-          numerator += (xValues[i] - meanX) * (yValues[i] - meanY);
-          denominator += Math.pow(xValues[i] - meanX, 2);
+      if (count >= 5) {
+        const x = input.points.map(p => p.value[0]);
+        const mx = utils.mean(x);
+        const my = mean;
+        let num = 0, den = 0;
+        for (let i = 0; i < count; i++) {
+          num += (x[i] - mx) * (values[i] - my);
+          den += (x[i] - mx) * (x[i] - mx);
         }
-
-        slope = denominator === 0 ? 0 : numerator / denominator;
+        slope = den === 0 ? 0 : num / den;
       }
 
       return {
@@ -334,11 +327,30 @@ export class ChartManager {
       };
     `;
 
-    const result = await runSlot('aggregate', aggregateCode, {
-      points: selectedPoints
-    }, {
-      totalSum: this.calculateTotalSum()
-    });
+    // 获取正确的分母
+    const total = this.getScatterTotalSum();
+
+    const result = await runSlot(
+      'aggregate',
+      aggregateCode,
+      { points: selectedPoints },
+      { totalSum: total },
+      {
+        timeout: 1000,
+        outputSchema: {
+          type: 'object',
+          properties: {
+            count: {},
+            sum: {},
+            mean: {},
+            median: {},
+            stdev: {},
+            share: {},
+            slope: { optional: true }
+          }
+        }
+      }
+    );
 
     if (result.ok) {
       this.displayAggregateCard(result.data);
@@ -418,20 +430,29 @@ export class ChartManager {
       const contributions = [
         { name: '近端动量', value: data.features.momentum },
         { name: '节日效应', value: data.features.holidayLift },
-        { name: '油价适应', value: 1 - Math.abs(data.features.fuelSensitivity) },
-        { name: '气温适应', value: 1 - Math.abs(data.features.tempSensitivity) },
-        { name: '宏观适应', value: data.features.macroAdaptation },
+        { name: '油价敏感度(-)', value: data.features.fuelSensitivity === null ? null : 1 - Math.abs(data.features.fuelSensitivity) },
+        { name: '气温敏感度(-)', value: data.features.tempSensitivity === null ? null : 1 - Math.abs(data.features.tempSensitivity) },
+        { name: '宏观敏感度(-)', value: data.features.macroAdaptation === null ? null : 1 - Math.abs(data.features.macroAdaptation) },
         { name: '稳健趋势', value: data.features.trend }
       ];
 
       contributions.forEach(c => {
-        const color = c.value > 0 ? '#5470c6' : '#ee6666';
-        html += `
-          <div style="display: flex; justify-content: space-between; margin: 2px 0;">
-            <span>${c.name}:</span>
-            <span style="color: ${color}">${c.value.toFixed(3)}</span>
-          </div>
-        `;
+        if (c.value === null) {
+          html += `
+            <div style="display: flex; justify-content: space-between; margin: 2px 0;">
+              <span>${c.name}:</span>
+              <span style="color: #999">N/A</span>
+            </div>
+          `;
+        } else {
+          const color = c.value > 0 ? '#5470c6' : '#ee6666';
+          html += `
+            <div style="display: flex; justify-content: space-between; margin: 2px 0;">
+              <span>${c.name}:</span>
+              <span style="color: ${color}">${c.value.toFixed(3)}</span>
+            </div>
+          `;
+        }
       });
     }
 
@@ -473,10 +494,11 @@ export class ChartManager {
   }
 
   /**
-   * 创建迷你sparkline
+   * 创建迷你sparkline（图片模式）
    */
   async createMiniSparkline(data) {
-    const cacheKey = `sparkline_${data.store}_${data.date}`;
+    const N = paramManager.get('display.tooltipWeeks') || 8;
+    const cacheKey = `spark_${data.store}_${data.date}_${N}`;
 
     if (this.miniChartCache.has(cacheKey)) {
       return this.miniChartCache.get(cacheKey);
@@ -486,55 +508,69 @@ export class ChartManager {
     const container = document.createElement('div');
     container.style.width = '280px';
     container.style.height = '60px';
+    container.style.position = 'absolute';
+    container.style.left = '-9999px';
+    document.body.appendChild(container);
 
-    // 获取近期数据（这里简化处理）
-    const recentData = this.getRecentWeeksData(data.store, data.date, 8);
+    try {
+      // 获取真实数据
+      const recentData = dataProcessor.getStoreRecentWeeks(data.store, data.date, N);
 
-    if (recentData.length > 0) {
-      const miniChart = echarts.init(container);
+      if (recentData.length > 0) {
+        const miniChart = echarts.init(container);
 
-      miniChart.setOption({
-        grid: {
-          top: 5,
-          right: 5,
-          bottom: 5,
-          left: 5
-        },
-        xAxis: {
-          type: 'category',
-          show: false,
-          data: recentData.map((_, i) => i)
-        },
-        yAxis: {
-          type: 'value',
-          show: false
-        },
-        series: [{
-          type: 'line',
-          data: recentData.map(d => d.weeklySales),
-          smooth: true,
-          showSymbol: false,
-          lineStyle: {
-            width: 1.5,
-            color: '#5470c6'
+        miniChart.setOption({
+          grid: {
+            top: 5,
+            right: 5,
+            bottom: 5,
+            left: 5
           },
-          areaStyle: {
-            color: 'rgba(84, 112, 198, 0.15)'
+          xAxis: {
+            type: 'category',
+            show: false,
+            data: recentData.map((_, i) => i)
           },
-          markPoint: {
-            symbol: 'circle',
-            symbolSize: 4,
-            data: recentData
-              .map((d, i) => d.holidayFlag ? { coord: [i, d.weeklySales] } : null)
-              .filter(d => d !== null)
-          }
-        }]
-      });
+          yAxis: {
+            type: 'value',
+            show: false
+          },
+          series: [{
+            type: 'line',
+            data: recentData.map(d => d.weeklySales),
+            smooth: true,
+            showSymbol: false,
+            lineStyle: {
+              width: 1.5,
+              color: '#5470c6'
+            },
+            areaStyle: {
+              color: 'rgba(84, 112, 198, 0.15)'
+            },
+            markPoint: {
+              symbol: 'circle',
+              symbolSize: 4,
+              data: recentData
+                .map((d, i) => d.holidayFlag ? { coord: [i, d.weeklySales] } : null)
+                .filter(d => d !== null)
+            }
+          }]
+        });
 
-      // 转换为HTML
-      const html = container.innerHTML;
-      this.miniChartCache.set(cacheKey, html);
-      return html;
+        // 导出为图片
+        const url = miniChart.getDataURL({
+          pixelRatio: 2,
+          backgroundColor: '#fff'
+        });
+        miniChart.dispose();
+
+        const html = `<img src="${url}" width="280" height="60" alt="sparkline"/>`;
+        this.miniChartCache.set(cacheKey, html);
+        return html;
+      }
+    } finally {
+      // 清理容器
+      document.body.removeChild(container);
     }
 
     return '<div style="color: #999;">无历史数据</div>';
@@ -605,18 +641,39 @@ export class ChartManager {
     return new Intl.NumberFormat('en-US').format(Math.round(num));
   }
 
+  /**
+   * 获取散点图总和（当前上下文）
+   */
+  getScatterTotalSum(chartId = 'scatter-chart') {
+    const chart = this.charts.get(chartId);
+    if (!chart) return 0;
+
+    const option = chart.getOption();
+    const data = (option.series?.[0]?.data) || [];
+    return data.reduce((s, d) => s + (d.value?.[1] ?? d.weeklySales ?? 0), 0);
+  }
+
+  /**
+   * 获取当前周总和（用于占比计算）
+   */
+  getCurrentWeekTotalSum(date) {
+    // 从预聚合表获取
+    const row = dataProcessor.rawData.find(r => r.date === date);
+    if (!row) return 0;
+
+    const key = `${row.year}-${row.week}`;
+    const aggregate = dataProcessor.weeklyAggregates.get(key);
+    return aggregate ? aggregate.totalSales : 0;
+  }
+
   calculateTotalSum() {
-    // 这里应该从实际数据计算
-    return 1000000;
+    // 废弃的方法，保留以避免其他地方调用出错
+    return this.getScatterTotalSum();
   }
 
   getRecentWeeksData(store, date, weeks) {
-    // 这里应该从dataProcessor获取
-    // 简化返回示例数据
-    return Array(weeks).fill(0).map((_, i) => ({
-      weeklySales: 1500000 + Math.random() * 200000,
-      holidayFlag: i === 3 ? 1 : 0
-    }));
+    // 现在使用dataProcessor获取真实数据
+    return dataProcessor.getStoreRecentWeeks(store, date, weeks);
   }
 
   /**

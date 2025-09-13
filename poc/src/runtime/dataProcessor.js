@@ -2,9 +2,9 @@
  * 数据预处理与特征计算
  */
 
-import { mean, median, quantile } from 'd3-array';
-import { scaleLinear } from 'd3-scale';
-import { timeParse, timeFormat } from 'd3-time-format';
+import { mean, median } from 'd3-array';
+import { timeParse } from 'd3-time-format';
+import { validateDataRow } from '../contract/schema.js';
 
 // 节日日期映射（2010-2012）
 const HOLIDAYS = {
@@ -43,7 +43,9 @@ export class DataProcessor {
    * 加载和解析CSV数据
    */
   async loadData(csvContent) {
-    const parseDate = timeParse('%d-%m-%Y');
+    const parseYMD = timeParse('%Y-%m-%d');
+    const parseDMY = timeParse('%d-%m-%Y');
+    const parseDate = (s) => parseYMD(s) || parseDMY(s) || null;
     const lines = csvContent.trim().split('\n');
     const headers = lines[0].split(',');
 
@@ -61,6 +63,9 @@ export class DataProcessor {
           value = parseInt(value);
         } else if (header === 'Date') {
           const parsed = parseDate(value);
+          if (!parsed) {
+            throw new Error(`日期解析失败: ${value}`);
+          }
           row.dateObj = parsed;
           row.year = parsed.getFullYear();
           row.week = this.getISOWeek(parsed);
@@ -88,6 +93,21 @@ export class DataProcessor {
       // 添加节日映射
       row.isHolidayWeek = this.isHolidayWeek(row.dateObj);
       row.isPreHolidayWeek = this.isPreHolidayWeek(row.dateObj);
+
+      // Schema校验
+      const vr = validateDataRow({
+        store: row.store,
+        date: row.date,
+        weeklySales: row.weeklySales,
+        holidayFlag: row.holidayFlag,
+        temperature: row.temperature,
+        fuelPrice: row.fuelPrice,
+        cpi: row.cpi,
+        unemployment: row.unemployment
+      });
+      if (!vr.valid) {
+        console.warn(`Schema校验警告（行${i}）: ${vr.errors.slice(0, 3).join('; ')}`);
+      }
 
       this.rawData.push(row);
     }
@@ -137,12 +157,12 @@ export class DataProcessor {
 
     for (let i = 0; i < storeData.length; i++) {
       if (i < window - 1) {
-        momentum.push(0); // 窗口不足
+        momentum.push(null); // 窗口不足
       } else {
         const windowData = storeData.slice(i - window + 1, i + 1);
         const ma = mean(windowData.map(d => d.weeklySales));
         const current = storeData[i].weeklySales;
-        momentum.push(current / ma);
+        momentum.push(ma === 0 ? null : current / ma);
       }
     }
 
@@ -150,19 +170,24 @@ export class DataProcessor {
   }
 
   /**
-   * 计算节日提升
+   * 计算节日提升（对数差）
    */
   calculateHolidayLift(storeData) {
     const lift = [];
 
     for (let i = 0; i < storeData.length; i++) {
       const current = storeData[i];
-      const prev = i > 0 ? storeData[i - 1] : current;
+      const prev = i > 0 ? storeData[i - 1] : null;
 
       if (current.isHolidayWeek || current.isPreHolidayWeek) {
-        lift.push(current.weeklySales - prev.weeklySales);
+        if (prev && prev.weeklySales > 0 && current.weeklySales > 0) {
+          // 使用对数差更稳健
+          lift.push(Math.log1p(current.weeklySales) - Math.log1p(prev.weeklySales));
+        } else {
+          lift.push(null);
+        }
       } else {
-        lift.push(0);
+        lift.push(null);
       }
     }
 
@@ -177,14 +202,14 @@ export class DataProcessor {
 
     for (let i = 0; i < storeData.length; i++) {
       if (i < window - 1) {
-        sensitivity.push(0); // 窗口不足
+        sensitivity.push(null); // 窗口不足
       } else {
         const windowData = storeData.slice(i - window + 1, i + 1);
         const beta = this.simpleRegression(
           windowData.map(d => d.fuelPrice),
           windowData.map(d => d.weeklySales)
         );
-        sensitivity.push(beta);
+        sensitivity.push(Number.isFinite(beta) ? beta : null);
       }
     }
 
@@ -199,14 +224,14 @@ export class DataProcessor {
 
     for (let i = 0; i < storeData.length; i++) {
       if (i < window - 1) {
-        sensitivity.push(0); // 窗口不足
+        sensitivity.push(null); // 窗口不足
       } else {
         const windowData = storeData.slice(i - window + 1, i + 1);
         const beta = this.simpleRegression(
           windowData.map(d => d.temperature),
           windowData.map(d => d.weeklySales)
         );
-        sensitivity.push(beta);
+        sensitivity.push(Number.isFinite(beta) ? beta : null);
       }
     }
 
@@ -214,14 +239,14 @@ export class DataProcessor {
   }
 
   /**
-   * 计算宏观逆风适应度
+   * 计算宏观敏感度（惩罚项）
    */
   calculateMacroAdaptation(storeData, window = 26) {
     const adaptation = [];
 
     for (let i = 0; i < storeData.length; i++) {
       if (i < window - 1) {
-        adaptation.push(0); // 窗口不足
+        adaptation.push(null); // 窗口不足
       } else {
         const windowData = storeData.slice(i - window + 1, i + 1);
 
@@ -237,6 +262,7 @@ export class DataProcessor {
           windowData.map(d => -d.cpi)
         ));
 
+        // 定义为"宏观敏感度强度"（越大越敏感→惩罚项）
         adaptation.push((corrUnemployment + corrCPI) / 2);
       }
     }
@@ -252,7 +278,7 @@ export class DataProcessor {
 
     for (let i = 0; i < storeData.length; i++) {
       if (i < window - 1) {
-        trends.push(0); // 窗口不足
+        trends.push(null); // 窗口不足
       } else {
         const windowData = storeData.slice(i - window + 1, i + 1);
         const sales = windowData.map(d => d.weeklySales);
@@ -263,7 +289,8 @@ export class DataProcessor {
           increments.push(sales[j] - sales[j - 1]);
         }
 
-        trends.push(median(increments) || 0);
+        const m = median(increments);
+        trends.push(Number.isFinite(m) ? m : null);
       }
     }
 
@@ -277,10 +304,10 @@ export class DataProcessor {
     const normalized = {};
 
     for (const [name, values] of Object.entries(features)) {
-      const validValues = values.filter(v => v !== 0); // 排除窗口不足的0值
+      const validValues = values.filter(v => v !== null && Number.isFinite(v));
 
       if (validValues.length === 0) {
-        normalized[name] = values.map(() => 0);
+        normalized[name] = values.map(() => null);
         continue;
       }
 
@@ -290,7 +317,7 @@ export class DataProcessor {
       if (std === 0) {
         normalized[name] = values.map(() => 0);
       } else {
-        normalized[name] = values.map(v => v === 0 ? 0 : (v - m) / std);
+        normalized[name] = values.map(v => (v === null || !Number.isFinite(v)) ? null : (v - m) / std);
       }
     }
 
@@ -306,27 +333,31 @@ export class DataProcessor {
   }
 
   /**
-   * 计算活跃度评分
+   * 计算活跃度评分（权重重标）
    */
   calculateActivityScore(row, weights) {
     if (!row.features) return 0;
 
-    const features = row.features;
+    const f = row.features;
 
-    // 惩罚项处理（转换为正向指标）
-    const fuelComponent = 1 - Math.abs(features.fuelSensitivity || 0);
-    const tempComponent = 1 - Math.abs(features.tempSensitivity || 0);
+    // 将null视为"不可用"并做有效权重重标
+    const terms = [
+      { w: weights.momentum, v: f.momentum },
+      { w: weights.holiday, v: f.holidayLift },
+      { w: weights.fuel, v: (f.fuelSensitivity === null ? null : 1 - Math.abs(f.fuelSensitivity)) },
+      { w: weights.temperature, v: (f.tempSensitivity === null ? null : 1 - Math.abs(f.tempSensitivity)) },
+      // 宏观敏感度为惩罚项：1 - |z|
+      { w: weights.macro, v: (f.macroAdaptation === null ? null : 1 - Math.abs(f.macroAdaptation)) },
+      { w: weights.trend, v: f.trend }
+    ];
 
-    // 加权求和
-    const score =
-      weights.momentum * (features.momentum || 0) +
-      weights.holiday * (features.holidayLift || 0) +
-      weights.fuel * fuelComponent +
-      weights.temperature * tempComponent +
-      weights.macro * (features.macroAdaptation || 0) +
-      weights.trend * (features.trend || 0);
+    // 筛选有效项
+    const eff = terms.filter(t => t.v !== null && Number.isFinite(t.v) && t.w > 0);
+    if (!eff.length) return 0;
 
-    return score;
+    // 重标权重
+    const sumW = eff.reduce((s, t) => s + t.w, 0);
+    return eff.reduce((s, t) => s + (t.w / sumW) * t.v, 0);
   }
 
   /**

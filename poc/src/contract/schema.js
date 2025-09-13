@@ -32,13 +32,20 @@ export const ContractSchema = {
     // 时间窗口参数
     timeWindow: {
       weeks: { type: 'number', enum: [4, 8, 13], default: 8 },
-      rollingWindow: { type: 'number', default: 26 }
+      rollingWindow: { type: 'number', min: 8, max: 52, default: 26 }
     },
 
     // 显示参数
     display: {
       tooltipWeeks: { type: 'number', enum: [8, 13], default: 8 },
       maxPoints: { type: 'number', default: 30000 }
+    },
+
+    // 散点参数（缺失会导致UI变更失效）
+    scatter: {
+      xField: { type: 'string', enum: ['temperature', 'fuelPrice', 'weekOfYear'], default: 'temperature' },
+      yField: { type: 'string', enum: ['weeklySales'], default: 'weeklySales' },
+      colorField: { type: 'string', enum: ['store', 'holidayFlag'], default: 'store' }
     }
   },
 

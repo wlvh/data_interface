@@ -40,9 +40,9 @@ export class ParameterPanel {
         ${this.renderSliderGroup('权重参数', [
       { id: 'weights.momentum', label: '近端动量', value: weights.momentum },
       { id: 'weights.holiday', label: '节日效应', value: weights.holiday },
-      { id: 'weights.fuel', label: '油价适应', value: weights.fuel },
-      { id: 'weights.temperature', label: '气温适应', value: weights.temperature },
-      { id: 'weights.macro', label: '宏观适应', value: weights.macro },
+      { id: 'weights.fuel', label: '油价敏感度(-)' , value: weights.fuel },
+      { id: 'weights.temperature', label: '气温敏感度(-)', value: weights.temperature },
+      { id: 'weights.macro', label: '宏观敏感度(-)', value: weights.macro },
       { id: 'weights.trend', label: '稳健趋势', value: weights.trend }
     ])}
 
