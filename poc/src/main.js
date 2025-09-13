@@ -169,11 +169,24 @@ class DataInterfaceApp {
     // 获取最新周的门店数据
     const storeData = this.getStoreActivityData(timeWindow.weeks);
 
-    // 计算每个门店的活跃度评分
-    const scoredData = storeData.map(store => ({
+    // 分析特征可用性，决定剔除策略
+    const { featureNAStats, excludeFeatures } = dataProcessor.analyzeFeatureAvailability(storeData, weights);
+
+    // 计算每个门店的活跃度评分（使用智能NA处理）
+    let scoredData = storeData.map(store => ({
       ...store,
-      activity: dataProcessor.calculateActivityScore(store, weights)
+      activity: dataProcessor.calculateActivityScore(store, weights, excludeFeatures)
     }));
+
+    // 如果超过30%的门店评分为null，说明数据质量问题严重
+    const nullCount = scoredData.filter(s => s.activity === null).length;
+    const nullRatio = nullCount / scoredData.length;
+
+    if (nullRatio > 0.3) {
+      console.warn(`警告：${(nullRatio * 100).toFixed(1)}%的门店无法计算活跃度评分`);
+      // 只保留有效评分的门店
+      scoredData = scoredData.filter(s => s.activity !== null);
+    }
 
     // 更新图表
     chartManager.updateActivityChart('activity-chart', scoredData, weights);
@@ -218,11 +231,19 @@ class DataInterfaceApp {
    * 获取门店活跃度数据
    */
   getStoreActivityData(weeks) {
-    // 获取每个门店的最新数据
+    // 获取每个门店的最新数据（跳过前面窗口不足的周）
     const storeMap = new Map();
 
-    // 按门店分组并获取最新记录
+    // 找出最新日期
+    const dates = this.data.map(d => d.dateObj);
+    const latestDate = new Date(Math.max(...dates));
+
+    // 按门店分组，获取最新的有足够历史数据的记录
     for (const row of this.data) {
+      // 跳过太早的数据（前26周用于滚动窗口计算）
+      const weeksDiff = Math.floor((latestDate - row.dateObj) / (7 * 24 * 60 * 60 * 1000));
+      if (weeksDiff > 26) continue; // 只看最近26周内的数据
+
       if (!storeMap.has(row.store)) {
         storeMap.set(row.store, row);
       } else {

@@ -359,38 +359,103 @@ export class DataProcessor {
   }
 
   /**
-   * 计算活跃度评分（一票否决）
+   * 计算活跃度评分（智能NA处理）
    */
-  calculateActivityScore(row, weights) {
+  calculateActivityScore(row, weights, excludeFeatures = new Set()) {
     if (!row.features) {
       return null;
     }
 
     const f = row.features;
 
-    // NA传播规则：任一特征为NA，则Activity=NA
-    const terms = [
-      { w: weights.momentum, v: f.momentum },
-      { w: weights.holiday, v: f.holidayLift },
-      { w: weights.fuel, v: (f.fuelSensitivity === null ? null : 1 - Math.abs(f.fuelSensitivity)) },
-      { w: weights.temperature, v: (f.tempSensitivity === null ? null : 1 - Math.abs(f.tempSensitivity)) },
-      // 宏观敏感度：使用 1 - z(MACRO_abs) 而非 1 - |z|
-      { w: weights.macro, v: (f.macroAdaptation === null ? null : 1 - f.macroAdaptation) },
-      { w: weights.trend, v: f.trend }
-    ];
+    // 构建特征项（排除被剔除的特征）
+    const terms = [];
 
-    // 一票否决：任一参与项为NA → 返回null
-    for (const t of terms) {
-      if (t.w > 0 && (t.v === null || !Number.isFinite(t.v))) {
-        return null;
-      }
+    if (!excludeFeatures.has('momentum')) {
+      terms.push({ name: 'momentum', w: weights.momentum, v: f.momentum });
+    }
+    if (!excludeFeatures.has('holiday')) {
+      terms.push({ name: 'holiday', w: weights.holiday, v: f.holidayLift });
+    }
+    if (!excludeFeatures.has('fuel')) {
+      terms.push({ name: 'fuel', w: weights.fuel, v: (f.fuelSensitivity === null ? null : 1 - Math.abs(f.fuelSensitivity)) });
+    }
+    if (!excludeFeatures.has('temperature')) {
+      terms.push({ name: 'temperature', w: weights.temperature, v: (f.tempSensitivity === null ? null : 1 - Math.abs(f.tempSensitivity)) });
+    }
+    if (!excludeFeatures.has('macro')) {
+      terms.push({ name: 'macro', w: weights.macro, v: (f.macroAdaptation === null ? null : 1 - f.macroAdaptation) });
+    }
+    if (!excludeFeatures.has('trend')) {
+      terms.push({ name: 'trend', w: weights.trend, v: f.trend });
+    }
+
+    // 过滤有效项（权重>0且值非NA）
+    const validTerms = terms.filter(t => t.w > 0 && t.v !== null && Number.isFinite(t.v));
+
+    // 如果没有有效项，返回null
+    if (validTerms.length === 0) {
+      return null;
     }
 
     // 计算加权平均
-    const sumW = terms.reduce((s, t) => s + t.w, 0);
+    const sumW = validTerms.reduce((s, t) => s + t.w, 0);
     if (sumW === 0) return null;
 
-    return terms.reduce((s, t) => s + (t.w / sumW) * t.v, 0);
+    return validTerms.reduce((s, t) => s + (t.w / sumW) * t.v, 0);
+  }
+
+  /**
+   * 分析特征NA情况并决定剔除策略
+   */
+  analyzeFeatureAvailability(data, weights) {
+    const featureNames = ['momentum', 'holiday', 'fuel', 'temperature', 'macro', 'trend'];
+    const featureNAStats = {};
+
+    // 统计每个特征的NA比例
+    featureNames.forEach(name => {
+      let naCount = 0;
+      let totalCount = 0;
+
+      data.forEach(row => {
+        if (row.features) {
+          totalCount++;
+          let value = row.features[name];
+
+          // 特殊处理需要转换的特征
+          if (name === 'fuel' || name === 'temperature') {
+            value = row.features[name + 'Sensitivity'];
+          } else if (name === 'holiday') {
+            value = row.features.holidayLift;
+          } else if (name === 'macro') {
+            value = row.features.macroAdaptation;
+          }
+
+          if (value === null || !Number.isFinite(value)) {
+            naCount++;
+          }
+        }
+      });
+
+      featureNAStats[name] = {
+        naCount,
+        totalCount,
+        naRatio: totalCount > 0 ? naCount / totalCount : 1
+      };
+    });
+
+    // 决定剔除哪些特征（NA比例超过30%的）
+    const excludeFeatures = new Set();
+    const threshold = 0.3;
+
+    for (const [name, stats] of Object.entries(featureNAStats)) {
+      if (stats.naRatio > threshold && weights[name] > 0) {
+        console.log(`特征 ${name} 的NA比例为 ${(stats.naRatio * 100).toFixed(1)}%，将被剔除`);
+        excludeFeatures.add(name);
+      }
+    }
+
+    return { featureNAStats, excludeFeatures };
   }
 
   /**
