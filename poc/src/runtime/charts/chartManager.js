@@ -190,19 +190,26 @@ export class ChartManager {
     const chart = this.charts.get(chartId);
     if (!chart) return;
 
-    // 处理activity为null的情况，显示为0或标记为N/A
+    // 保留null值，标记NA状态
     const scored = data.map(store => ({
       ...store,
-      activity: store.activity !== null ? store.activity : 0,
+      activity: store.activity,
       isNA: store.activity === null
     }));
-    scored.sort((a, b) => (b.activity || 0) - (a.activity || 0));
 
-    // 计算分位数颜色
-    const activities = scored.map(s => s.activity);
-    const q25 = this.quantile(activities, 0.25);
-    const q50 = this.quantile(activities, 0.5);
-    const q75 = this.quantile(activities, 0.75);
+    // 排序：NA值放到最后
+    scored.sort((a, b) => {
+      if (a.isNA && b.isNA) return 0;
+      if (a.isNA) return 1;
+      if (b.isNA) return -1;
+      return b.activity - a.activity;
+    });
+
+    // 计算分位数颜色（只基于非NA值）
+    const validActivities = scored.filter(s => !s.isNA).map(s => s.activity);
+    const q25 = validActivities.length > 0 ? this.quantile(validActivities, 0.25) : 0;
+    const q50 = validActivities.length > 0 ? this.quantile(validActivities, 0.5) : 0;
+    const q75 = validActivities.length > 0 ? this.quantile(validActivities, 0.75) : 0;
 
     // 更新图表
     chart.setOption({
@@ -211,12 +218,13 @@ export class ChartManager {
       },
       series: [{
         data: scored.map(s => ({
-          value: s.activity,
+          value: s.isNA ? null : s.activity,
           itemStyle: {
-            color: this.getQuantileColor(s.activity, q25, q50, q75)
+            color: s.isNA ? '#cccccc' : this.getQuantileColor(s.activity, q25, q50, q75)
           },
           store: s.store,
-          features: s.features
+          features: s.features,
+          isNA: s.isNA
         }))
       }]
     });
@@ -410,7 +418,7 @@ export class ChartManager {
     const data = params[0].data;
 
     // 检查缓存
-    const cacheKey = `activity_${data.store}`;
+    const cacheKey = `activity_${data.store}_${data.isNA}`;
     if (this.tooltipCache.has(cacheKey)) {
       return this.tooltipCache.get(cacheKey);
     }
@@ -421,10 +429,21 @@ export class ChartManager {
         <div style="font-weight: bold; margin-bottom: 8px;">
           Store ${data.store}
         </div>
+    `;
+
+    if (data.isNA) {
+      html += `
+        <div style="color: #999;">活跃度评分: 不可用</div>
+        <div style="margin-top: 8px; font-size: 12px; color: #999;">
+          原因：存在NA特征值（数据不足）
+        </div>
+      `;
+    } else {
+      html += `
         <div>活跃度评分: ${data.value.toFixed(3)}</div>
         <div style="margin-top: 8px; font-size: 12px;">
           <div>贡献分解:</div>
-    `;
+      `;
 
     if (data.features) {
       const weights = paramManager.get('weights');
@@ -457,9 +476,9 @@ export class ChartManager {
         }
       });
     }
+    }
 
     html += `
-        </div>
       </div>
     `;
 
@@ -476,14 +495,25 @@ export class ChartManager {
     const data = params.data;
 
     // 计算Share_t（当周该店销售额占当周总销售额的比例）
-    const weekTotal = this.getCurrentWeekTotalSum(data.date);
+    const weekTotal = this.getWeekTotalSumByYW(data.year, data.week);
     const share = weekTotal > 0 ? (data.weeklySales / weekTotal * 100).toFixed(2) : 0;
 
-    // 计算WoW和YoY
-    const prevWeekData = dataProcessor.rawData.find(r =>
-      r.store === data.store &&
-      Math.abs(r.dateObj - new Date(data.dateObj.getTime() - 7 * 24 * 60 * 60 * 1000)) < 24 * 60 * 60 * 1000
-    );
+    // 计算WoW（基于ISO年-周）
+    const prevWeekData = (() => {
+      let y = data.year, w = data.week;
+      if (w > 1) {
+        w -= 1;
+      } else {
+        // 跨年：找上一年的最后一周
+        y -= 1;
+        // ISO周年的最后一周通常是52或53
+        const lastWeekDate = new Date(Date.UTC(y, 11, 28)); // 12月28日肯定在最后一周
+        w = dataProcessor.getISOWeek(lastWeekDate);
+      }
+      return dataProcessor.rawData.find(r => r.store === data.store && r.year === y && r.week === w);
+    })();
+
+    // 计算YoY
     const prevYearData = dataProcessor.rawData.find(r =>
       r.store === data.store &&
       r.year === data.year - 1 &&
@@ -579,7 +609,7 @@ export class ChartManager {
               symbol: 'circle',
               symbolSize: 4,
               data: recentData
-                .map((d, i) => d.holidayFlag ? { coord: [i, d.weeklySales] } : null)
+                .map((d, i) => (d.holidayFlag || d.isHolidayWeek || d.isPreHolidayWeek) ? { coord: [i, d.weeklySales] } : null)
                 .filter(d => d !== null)
             }
           }]
@@ -678,6 +708,15 @@ export class ChartManager {
     if (!row) return 0;
 
     const key = `${row.year}-${row.week}`;
+    const aggregate = dataProcessor.weeklyAggregates.get(key);
+    return aggregate ? aggregate.totalSales : 0;
+  }
+
+  /**
+   * 通过年-周获取周总和
+   */
+  getWeekTotalSumByYW(year, week) {
+    const key = `${year}-${week}`;
     const aggregate = dataProcessor.weeklyAggregates.get(key);
     return aggregate ? aggregate.totalSales : 0;
   }

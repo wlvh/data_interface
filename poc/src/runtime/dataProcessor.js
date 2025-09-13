@@ -363,8 +363,7 @@ export class DataProcessor {
    */
   calculateActivityScore(row, weights) {
     if (!row.features) {
-      console.warn('No features found for row:', row.store);
-      return 0;
+      return null;
     }
 
     const f = row.features;
@@ -380,20 +379,18 @@ export class DataProcessor {
       { w: weights.trend, v: f.trend }
     ];
 
-    // 对于活跃度图表，我们需要显示数据，即使有NA
-    // 只计算非NA项的加权平均
-    const validTerms = terms.filter(t => t.w > 0 && t.v !== null && Number.isFinite(t.v));
-
-    if (validTerms.length === 0) {
-      console.warn('All features are NA for store:', row.store);
-      return 0;
+    // 一票否决：任一参与项为NA → 返回null
+    for (const t of terms) {
+      if (t.w > 0 && (t.v === null || !Number.isFinite(t.v))) {
+        return null;
+      }
     }
 
-    // 计算有效项的加权平均
-    const sumW = validTerms.reduce((s, t) => s + t.w, 0);
-    if (sumW === 0) return 0;
+    // 计算加权平均
+    const sumW = terms.reduce((s, t) => s + t.w, 0);
+    if (sumW === 0) return null;
 
-    return validTerms.reduce((s, t) => s + (t.w / sumW) * t.v, 0);
+    return terms.reduce((s, t) => s + (t.w / sumW) * t.v, 0);
   }
 
   /**

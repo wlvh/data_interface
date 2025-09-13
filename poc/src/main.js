@@ -106,13 +106,45 @@ class DataInterfaceApp {
   bindEvents() {
     // 监听参数变化
     window.addEventListener('parametersChanged', (event) => {
-      this.updateAllCharts();
+      const changedPath = event.detail?.changedPath || event.detail?.selectId;
+      // 如果时间窗口参数改变，需要重新计算特征
+      if (changedPath && changedPath.startsWith('timeWindow')) {
+        this.recomputeAndUpdate();
+      } else {
+        this.updateAllCharts();
+      }
     });
 
     // 监听图表选择变化
     chartManager.onSelectionChange = (selectedPoints) => {
       this.handleSelectionChange(selectedPoints);
     };
+  }
+
+  /**
+   * 重新计算特征并更新图表
+   */
+  async recomputeAndUpdate() {
+    try {
+      // 显示加载状态
+      const loadingMsg = document.createElement('div');
+      loadingMsg.id = 'recomputing-msg';
+      loadingMsg.innerHTML = '正在重新计算特征...';
+      loadingMsg.style.cssText = 'position: fixed; top: 10px; right: 10px; background: #fff; padding: 10px; border: 1px solid #ccc; z-index: 1000;';
+      document.body.appendChild(loadingMsg);
+
+      // 重新计算特征（会读取最新的窗口参数）
+      await dataProcessor.calculateFeatures();
+
+      // 更新图表
+      this.updateAllCharts();
+
+      // 移除加载状态
+      document.body.removeChild(loadingMsg);
+    } catch (error) {
+      console.error('特征重算失败:', error);
+      this.showError('特征重算失败: ' + error.message);
+    }
   }
 
   /**
@@ -254,9 +286,8 @@ class DataInterfaceApp {
     `;
 
     try {
-      // 获取当前筛选上下文的总和
-      const filteredData = this.data; // 这里应该基于当前筛选条件
-      const totalSum = filteredData.reduce((sum, d) => sum + d.weeklySales, 0);
+      // 获取当前筛选上下文的总和（使用散点图当前显示的数据）
+      const totalSum = chartManager.getScatterTotalSum('scatter-chart');
       const xField = paramManager.get('scatter.xField');
 
       const result = await runSlot(
