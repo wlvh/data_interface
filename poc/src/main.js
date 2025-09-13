@@ -6,7 +6,7 @@ import { dataProcessor } from './runtime/dataProcessor.js';
 import { chartManager } from './runtime/charts/chartManager.js';
 import { paramManager } from './runtime/params/manager.js';
 import { ParameterPanel } from './ui/panels/parameterPanel.js';
-import Papa from 'papaparse';
+import { runSlot } from './runtime/worker/sandbox.js';
 
 class DataInterfaceApp {
   constructor() {
@@ -106,13 +106,45 @@ class DataInterfaceApp {
   bindEvents() {
     // 监听参数变化
     window.addEventListener('parametersChanged', (event) => {
-      this.updateAllCharts();
+      const changedPath = event.detail?.changedPath || event.detail?.selectId;
+      // 如果时间窗口参数改变，需要重新计算特征
+      if (changedPath && changedPath.startsWith('timeWindow')) {
+        this.recomputeAndUpdate();
+      } else {
+        this.updateAllCharts();
+      }
     });
 
     // 监听图表选择变化
     chartManager.onSelectionChange = (selectedPoints) => {
       this.handleSelectionChange(selectedPoints);
     };
+  }
+
+  /**
+   * 重新计算特征并更新图表
+   */
+  async recomputeAndUpdate() {
+    try {
+      // 显示加载状态
+      const loadingMsg = document.createElement('div');
+      loadingMsg.id = 'recomputing-msg';
+      loadingMsg.innerHTML = '正在重新计算特征...';
+      loadingMsg.style.cssText = 'position: fixed; top: 10px; right: 10px; background: #fff; padding: 10px; border: 1px solid #ccc; z-index: 1000;';
+      document.body.appendChild(loadingMsg);
+
+      // 重新计算特征（会读取最新的窗口参数）
+      await dataProcessor.calculateFeatures();
+
+      // 更新图表
+      this.updateAllCharts();
+
+      // 移除加载状态
+      document.body.removeChild(loadingMsg);
+    } catch (error) {
+      console.error('特征重算失败:', error);
+      this.showError('特征重算失败: ' + error.message);
+    }
   }
 
   /**
@@ -137,11 +169,24 @@ class DataInterfaceApp {
     // 获取最新周的门店数据
     const storeData = this.getStoreActivityData(timeWindow.weeks);
 
-    // 计算每个门店的活跃度评分
-    const scoredData = storeData.map(store => ({
+    // 分析特征可用性，决定剔除策略
+    const { featureNAStats, excludeFeatures } = dataProcessor.analyzeFeatureAvailability(storeData, weights);
+
+    // 计算每个门店的活跃度评分（使用智能NA处理）
+    let scoredData = storeData.map(store => ({
       ...store,
-      activity: dataProcessor.calculateActivityScore(store, weights)
+      activity: dataProcessor.calculateActivityScore(store, weights, excludeFeatures)
     }));
+
+    // 如果超过30%的门店评分为null，说明数据质量问题严重
+    const nullCount = scoredData.filter(s => s.activity === null).length;
+    const nullRatio = nullCount / scoredData.length;
+
+    if (nullRatio > 0.3) {
+      console.warn(`警告：${(nullRatio * 100).toFixed(1)}%的门店无法计算活跃度评分`);
+      // 只保留有效评分的门店
+      scoredData = scoredData.filter(s => s.activity !== null);
+    }
 
     // 更新图表
     chartManager.updateActivityChart('activity-chart', scoredData, weights);
@@ -186,11 +231,19 @@ class DataInterfaceApp {
    * 获取门店活跃度数据
    */
   getStoreActivityData(weeks) {
-    // 获取每个门店的最新数据
+    // 获取每个门店的最新数据（跳过前面窗口不足的周）
     const storeMap = new Map();
 
-    // 按门店分组并获取最新记录
+    // 找出最新日期
+    const dates = this.data.map(d => d.dateObj);
+    const latestDate = new Date(Math.max(...dates));
+
+    // 按门店分组，获取最新的有足够历史数据的记录
     for (const row of this.data) {
+      // 跳过太早的数据（前26周用于滚动窗口计算）
+      const weeksDiff = Math.floor((latestDate - row.dateObj) / (7 * 24 * 60 * 60 * 1000));
+      if (weeksDiff > 26) continue; // 只看最近26周内的数据
+
       if (!storeMap.has(row.store)) {
         storeMap.set(row.store, row);
       } else {
@@ -213,68 +266,81 @@ class DataInterfaceApp {
       return;
     }
 
-    // 计算聚合统计
-    const stats = this.calculateAggregateStats(selectedPoints);
+    // 使用Worker槽位计算聚合统计
+    const aggregateCode = `
+      const values = input.points.map(p => p.weeklySales || p.value[1]);
+      const count = input.points.length;
+      const sum = utils.sum(values);
+      const mean = utils.mean(values);
+      const median = utils.median(values);
+      const stdev = utils.stdev(values);
 
-    // 显示统计卡片
-    this.displayAggregateCard(stats);
-  }
+      // 计算占比（基于筛选后的总和）
+      const share = params.totalSum > 0 ? sum / params.totalSum : 0;
 
-  /**
-   * 计算聚合统计
-   */
-  calculateAggregateStats(points) {
-    const values = points.map(p => p.weeklySales || p.value[1]);
+      // 计算局部斜率（样本充足才计算）
+      let slope = null;
+      if (count >= 5) {
+        const xValues = input.points.map(p => p[params.xField] || p.value[0]);
+        const meanX = utils.mean(xValues);
+        const meanY = mean;
+        let numerator = 0;
+        let denominator = 0;
 
-    const sum = values.reduce((a, b) => a + b, 0);
-    const mean = sum / values.length;
+        for (let i = 0; i < count; i++) {
+          numerator += (xValues[i] - meanX) * (values[i] - meanY);
+          denominator += (xValues[i] - meanX) * (xValues[i] - meanX);
+        }
 
-    const sorted = [...values].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)];
+        slope = denominator === 0 ? 0 : numerator / denominator;
+      }
 
-    const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
-    const stdev = Math.sqrt(variance);
+      return {
+        count,
+        sum,
+        mean,
+        median,
+        stdev,
+        share,
+        slope
+      };
+    `;
 
-    // 计算占比
-    const totalSum = this.data.reduce((sum, d) => sum + d.weeklySales, 0);
-    const share = sum / totalSum;
+    try {
+      // 获取当前筛选上下文的总和（使用散点图当前显示的数据）
+      const totalSum = chartManager.getScatterTotalSum('scatter-chart');
+      const xField = paramManager.get('scatter.xField');
 
-    // 计算局部斜率（如果有足够的点）
-    let slope = null;
-    if (points.length >= 5) {
-      const xValues = points.map(p => p[paramManager.get('scatter.xField')] || p.value[0]);
-      const yValues = values;
-      slope = this.calculateSlope(xValues, yValues);
+      const result = await runSlot(
+        'aggregate',
+        aggregateCode,
+        { points: selectedPoints },
+        { totalSum, xField },
+        {
+          timeout: 1000,
+          outputSchema: {
+            type: 'object',
+            properties: {
+              count: {},
+              sum: {},
+              mean: {},
+              median: {},
+              stdev: {},
+              share: {},
+              slope: { optional: true }
+            }
+          }
+        }
+      );
+
+      if (result.ok) {
+        this.displayAggregateCard(result.data);
+      } else {
+        console.error('聚合计算失败:', result.error);
+      }
+    } catch (error) {
+      console.error('Worker执行失败:', error);
     }
-
-    return {
-      count: points.length,
-      sum,
-      mean,
-      median,
-      stdev,
-      share,
-      slope
-    };
-  }
-
-  /**
-   * 计算斜率
-   */
-  calculateSlope(x, y) {
-    const n = x.length;
-    const meanX = x.reduce((a, b) => a + b, 0) / n;
-    const meanY = y.reduce((a, b) => a + b, 0) / n;
-
-    let numerator = 0;
-    let denominator = 0;
-
-    for (let i = 0; i < n; i++) {
-      numerator += (x[i] - meanX) * (y[i] - meanY);
-      denominator += Math.pow(x[i] - meanX, 2);
-    }
-
-    return denominator === 0 ? 0 : numerator / denominator;
   }
 
   /**
