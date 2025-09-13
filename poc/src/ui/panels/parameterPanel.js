@@ -209,8 +209,13 @@ export class ParameterPanel {
     const selectId = event.target.id;
     const value = event.target.value;
 
-    // 简化类型转换 - 直接使用Number()，参数验证逻辑会处理NaN
-    paramManager.set(selectId, Number(value));
+    // 根据参数类型决定是否转换为数字
+    // timeWindow.weeks 和 display.tooltipWeeks 需要数字，scatter.* 保持字符串
+    const processedValue = (selectId === 'timeWindow.weeks' || selectId === 'display.tooltipWeeks')
+      ? Number(value)
+      : value;
+
+    paramManager.set(selectId, processedValue);
     this.triggerChartUpdate(selectId);
   }
 
