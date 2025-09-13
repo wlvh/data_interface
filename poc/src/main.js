@@ -11,6 +11,8 @@ import { runSlot } from './runtime/worker/sandbox.js';
 class DataInterfaceApp {
   constructor() {
     this.data = null;
+    this.latestDataByStore = new Map(); // 缓存每个门店的最新数据
+    this.latestDate = null; // 缓存最新日期
     this.paramPanel = null;
     this.isInitialized = false;
   }
@@ -60,12 +62,37 @@ class DataInterfaceApp {
 
       console.log(`加载了 ${this.data.length} 条数据记录`);
 
-      // 获取最新一周的数据用于展示
-      this.latestWeekData = this.getLatestWeekData();
+      // 数据加载后，立即预处理以备后用
+      this.prepareLatestData();
 
     } catch (error) {
       throw new Error(`数据加载失败: ${error.message}`);
     }
+  }
+
+  /**
+   * 预处理数据，找出每个门店的最新记录
+   */
+  prepareLatestData() {
+    // 找出全局最新日期
+    const dates = this.data.map(d => d.dateObj);
+    this.latestDate = new Date(Math.max(...dates));
+
+    // 缓存每个门店的最新数据（跳过前面窗口不足的周）
+    this.latestDataByStore.clear();
+
+    for (const row of this.data) {
+      // 跳过太早的数据（前26周用于滚动窗口计算）
+      const weeksDiff = Math.floor((this.latestDate - row.dateObj) / (7 * 24 * 60 * 60 * 1000));
+      if (weeksDiff > 26) continue;
+
+      if (!this.latestDataByStore.has(row.store) ||
+          row.dateObj > this.latestDataByStore.get(row.store).dateObj) {
+        this.latestDataByStore.set(row.store, row);
+      }
+    }
+
+    console.log(`预处理完成: ${this.latestDataByStore.size} 个门店的最新数据已缓存`);
   }
 
   /**
@@ -136,6 +163,9 @@ class DataInterfaceApp {
       // 重新计算特征（会读取最新的窗口参数）
       await dataProcessor.calculateFeatures();
 
+      // 重新预处理数据缓存
+      this.prepareLatestData();
+
       // 更新图表
       this.updateAllCharts();
 
@@ -166,8 +196,8 @@ class DataInterfaceApp {
    * 更新活跃度图表
    */
   updateActivityChart(weights, timeWindow) {
-    // 获取最新周的门店数据
-    const storeData = this.getStoreActivityData(timeWindow.weeks);
+    // 直接从缓存中获取每个门店的最新数据
+    const storeData = Array.from(this.latestDataByStore.values());
 
     // 分析特征可用性，决定剔除策略
     const { featureNAStats, excludeFeatures } = dataProcessor.analyzeFeatureAvailability(storeData, weights);
@@ -213,48 +243,16 @@ class DataInterfaceApp {
   }
 
   /**
-   * 获取最新周数据
+   * 获取最新周数据（使用缓存）
    */
   getLatestWeekData() {
-    // 找出最新的日期
-    const dates = this.data.map(d => d.dateObj);
-    const latestDate = new Date(Math.max(...dates));
+    if (!this.latestDate) return [];
 
     // 获取最新周的数据
     return this.data.filter(d => {
-      const diff = Math.abs(d.dateObj - latestDate);
+      const diff = Math.abs(d.dateObj - this.latestDate);
       return diff < 7 * 24 * 60 * 60 * 1000; // 一周内
     });
-  }
-
-  /**
-   * 获取门店活跃度数据
-   */
-  getStoreActivityData(weeks) {
-    // 获取每个门店的最新数据（跳过前面窗口不足的周）
-    const storeMap = new Map();
-
-    // 找出最新日期
-    const dates = this.data.map(d => d.dateObj);
-    const latestDate = new Date(Math.max(...dates));
-
-    // 按门店分组，获取最新的有足够历史数据的记录
-    for (const row of this.data) {
-      // 跳过太早的数据（前26周用于滚动窗口计算）
-      const weeksDiff = Math.floor((latestDate - row.dateObj) / (7 * 24 * 60 * 60 * 1000));
-      if (weeksDiff > 26) continue; // 只看最近26周内的数据
-
-      if (!storeMap.has(row.store)) {
-        storeMap.set(row.store, row);
-      } else {
-        const existing = storeMap.get(row.store);
-        if (row.dateObj > existing.dateObj) {
-          storeMap.set(row.store, row);
-        }
-      }
-    }
-
-    return Array.from(storeMap.values());
   }
 
   /**

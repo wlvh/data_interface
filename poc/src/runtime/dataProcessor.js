@@ -161,26 +161,37 @@ export class DataProcessor {
   }
 
   /**
+   * @private
+   * 通用的滚动窗口计算器
+   * @param {Array<Object>} storeData - 单个门店按时间排序的数据
+   * @param {number} windowSize - 窗口大小
+   * @param {Function} calculator - 接收窗口数据并返回计算值的函数
+   * @returns {Array<number|null>} 计算结果数组
+   */
+  _calculateRollingFeature(storeData, windowSize, calculator) {
+    return storeData.map((_, i) => {
+      // 如果窗口未满，返回 null
+      if (i < windowSize - 1) {
+        return null;
+      }
+      // 提取窗口数据并执行计算
+      const windowData = storeData.slice(i - windowSize + 1, i + 1);
+      const result = calculator(windowData);
+      // 确保结果是有效的数字
+      return Number.isFinite(result) ? result : null;
+    });
+  }
+
+  /**
    * 计算近端动量
    */
   calculateMomentum(storeData, window = null) {
-    if (window === null) {
-      window = paramManager.get('timeWindow.weeks') || 8;
-    }
-    const momentum = [];
-
-    for (let i = 0; i < storeData.length; i++) {
-      if (i < window - 1) {
-        momentum.push(null); // 窗口不足
-      } else {
-        const windowData = storeData.slice(i - window + 1, i + 1);
-        const ma = mean(windowData.map(d => d.weeklySales));
-        const current = storeData[i].weeklySales;
-        momentum.push(ma === 0 ? null : current / ma);
-      }
-    }
-
-    return momentum;
+    const winSize = window ?? paramManager.get('timeWindow.weeks') ?? 8;
+    return this._calculateRollingFeature(storeData, winSize, (winData) => {
+      const ma = mean(winData.map(d => d.weeklySales));
+      const current = winData[winData.length - 1].weeklySales;
+      return ma === 0 ? null : current / ma;
+    });
   }
 
   /**
@@ -212,115 +223,67 @@ export class DataProcessor {
    * 计算油价敏感度（滚动回归）
    */
   calculateFuelSensitivity(storeData, window = null) {
-    if (window === null) {
-      window = paramManager.get('timeWindow.rollingWindow') || 26;
-    }
-    const sensitivity = [];
-
-    for (let i = 0; i < storeData.length; i++) {
-      if (i < window - 1) {
-        sensitivity.push(null); // 窗口不足
-      } else {
-        const windowData = storeData.slice(i - window + 1, i + 1);
-        const beta = this.simpleRegression(
-          windowData.map(d => d.fuelPrice),
-          windowData.map(d => d.weeklySales)
-        );
-        sensitivity.push(Number.isFinite(beta) ? beta : null);
-      }
-    }
-
-    return sensitivity;
+    const winSize = window ?? paramManager.get('timeWindow.rollingWindow') ?? 26;
+    return this._calculateRollingFeature(storeData, winSize, (winData) =>
+      this.simpleRegression(
+        winData.map(d => d.fuelPrice),
+        winData.map(d => d.weeklySales)
+      )
+    );
   }
 
   /**
    * 计算气温敏感度（滚动回归）
    */
   calculateTempSensitivity(storeData, window = null) {
-    if (window === null) {
-      window = paramManager.get('timeWindow.rollingWindow') || 26;
-    }
-    const sensitivity = [];
-
-    for (let i = 0; i < storeData.length; i++) {
-      if (i < window - 1) {
-        sensitivity.push(null); // 窗口不足
-      } else {
-        const windowData = storeData.slice(i - window + 1, i + 1);
-        const beta = this.simpleRegression(
-          windowData.map(d => d.temperature),
-          windowData.map(d => d.weeklySales)
-        );
-        sensitivity.push(Number.isFinite(beta) ? beta : null);
-      }
-    }
-
-    return sensitivity;
+    const winSize = window ?? paramManager.get('timeWindow.rollingWindow') ?? 26;
+    return this._calculateRollingFeature(storeData, winSize, (winData) =>
+      this.simpleRegression(
+        winData.map(d => d.temperature),
+        winData.map(d => d.weeklySales)
+      )
+    );
   }
 
   /**
    * 计算宏观敏感度（MACRO_abs）
    */
   calculateMacroAdaptation(storeData, window = null) {
-    if (window === null) {
-      window = paramManager.get('timeWindow.rollingWindow') || 26;
-    }
-    const adaptation = [];
+    const winSize = window ?? paramManager.get('timeWindow.rollingWindow') ?? 26;
+    return this._calculateRollingFeature(storeData, winSize, (winData) => {
+      // 计算与失业率的相关系数绝对值
+      const corrUnemployment = Math.abs(this.correlation(
+        winData.map(d => d.weeklySales),
+        winData.map(d => d.unemployment)
+      ));
 
-    for (let i = 0; i < storeData.length; i++) {
-      if (i < window - 1) {
-        adaptation.push(null); // 窗口不足
-      } else {
-        const windowData = storeData.slice(i - window + 1, i + 1);
+      // 计算与CPI的相关系数绝对值
+      const corrCPI = Math.abs(this.correlation(
+        winData.map(d => d.weeklySales),
+        winData.map(d => d.cpi)
+      ));
 
-        // 计算与失业率的相关系数绝对值
-        const corrUnemployment = Math.abs(this.correlation(
-          windowData.map(d => d.weeklySales),
-          windowData.map(d => d.unemployment)
-        ));
-
-        // 计算与CPI的相关系数绝对值
-        const corrCPI = Math.abs(this.correlation(
-          windowData.map(d => d.weeklySales),
-          windowData.map(d => d.cpi)
-        ));
-
-        // MACRO_abs = mean(|corr(Sales, Unemployment)|, |corr(Sales, CPI)|)
-        adaptation.push((corrUnemployment + corrCPI) / 2);
-      }
-    }
-
-    return adaptation;
+      // MACRO_abs = mean(|corr(Sales, Unemployment)|, |corr(Sales, CPI)|)
+      return (corrUnemployment + corrCPI) / 2;
+    });
   }
 
   /**
    * 计算稳健趋势
    */
   calculateTrend(storeData, window = null) {
-    if (window === null) {
-      window = paramManager.get('timeWindow.weeks') || 8;
-    }
-    const trends = [];
+    const winSize = window ?? paramManager.get('timeWindow.weeks') ?? 8;
+    return this._calculateRollingFeature(storeData, winSize, (winData) => {
+      const sales = winData.map(d => d.weeklySales);
 
-    for (let i = 0; i < storeData.length; i++) {
-      if (i < window - 1) {
-        trends.push(null); // 窗口不足
-      } else {
-        const windowData = storeData.slice(i - window + 1, i + 1);
-        const sales = windowData.map(d => d.weeklySales);
-
-        // 使用中位增量作为稳健趋势
-        const increments = [];
-        for (let j = 1; j < sales.length; j++) {
-          increments.push(sales[j] - sales[j - 1]);
-        }
-
-        const m = median(increments);
-        trends.push(Number.isFinite(m) ? m : null);
+      // 使用中位增量作为稳健趋势
+      const increments = [];
+      for (let j = 1; j < sales.length; j++) {
+        increments.push(sales[j] - sales[j - 1]);
       }
-    }
 
-    return trends;
+      return median(increments);
+    });
   }
 
   /**

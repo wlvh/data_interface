@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>🔧 统一测试中心</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+        }
+
+        .test-category {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .test-category h2 {
+            color: #007bff;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .test-item {
+            border-left: 3px solid #ddd;
+            padding: 15px;
+            margin: 15px 0;
+            background: #fafafa;
+            transition: all 0.3s;
+        }
+
+        .test-item.critical {
+            border-left-color: #ff4444;
+        }
+
+        .test-item.running {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+        }
+
+        .test-item.passed {
+            background: #d4edda;
+            border-left-color: #28a745;
+        }
+
+        .test-item.failed {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+        }
+
+        .test-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .test-title {
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .test-status {
+            font-size: 14px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: #6c757d;
+            color: white;
+        }
+
+        .control-panel {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button.secondary {
+            background: #6c757d;
+        }
+
+        button.secondary:hover {
+            background: #545b62;
+        }
+
+        button.success {
+            background: #28a745;
+        }
+
+        button.success:hover {
+            background: #218838;
+        }
+
+        .result {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .stat-item {
+            flex: 1;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 5px;
+            margin: 15px 0;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .filter-tab {
+            padding: 8px 16px;
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .filter-tab.active {
+            color: #007bff;
+            border-bottom-color: #007bff;
+            font-weight: bold;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #0056b3);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 统一测试中心</h1>
+
+    <!-- 统计面板 -->
+    <div class="stats">
+        <div class="stat-item">
+            <div class="stat-value" id="total-count">0</div>
+            <div class="stat-label">总测试数</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="passed-count" style="color: #28a745;">0</div>
+            <div class="stat-label">通过</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="failed-count" style="color: #dc3545;">0</div>
+            <div class="stat-label">失败</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="pending-count" style="color: #6c757d;">0</div>
+            <div class="stat-label">待测试</div>
+        </div>
+    </div>
+
+    <!-- 进度条 -->
+    <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill">0%</div>
+    </div>
+
+    <!-- 控制面板 -->
+    <div class="control-panel">
+        <button onclick="runAllTests()" class="success">▶️ 运行所有测试</button>
+        <button onclick="runCriticalTests()">🔴 仅运行关键测试</button>
+        <button onclick="clearResults()" class="secondary">🔄 清除结果</button>
+        <button onclick="exportResults()">📊 导出报告</button>
+    </div>
+
+    <!-- 过滤标签 -->
+    <div class="filter-tabs">
+        <button class="filter-tab active" onclick="filterTests('all')">全部</button>
+        <button class="filter-tab" onclick="filterTests('critical')">关键测试</button>
+        <button class="filter-tab" onclick="filterTests('passed')">已通过</button>
+        <button class="filter-tab" onclick="filterTests('failed')">失败</button>
+    </div>
+
+    <!-- 测试容器 -->
+    <div id="test-container"></div>
+
+    <script type="module">
+        // 导入所需模块
+        import { validateSlot, runSlot } from './src/runtime/worker/sandbox.js';
+        import { chartManager } from './src/runtime/charts/chartManager.js';
+        import { paramManager } from './src/runtime/params/manager.js';
+        import { dataProcessor } from './src/runtime/dataProcessor.js';
+
+        // 测试状态管理
+        const testState = {
+            results: new Map(),
+            stats: {
+                total: 0,
+                passed: 0,
+                failed: 0,
+                pending: 0
+            }
+        };
+
+        // 定义测试套件
+        const testSuites = [
+            {
+                name: '核心安全修复',
+                icon: '🛡️',
+                tests: [
+                    {
+                        id: 'security-sandbox',
+                        name: '沙箱安全修复验证',
+                        critical: true,
+                        testFn: async (log) => {
+                            log('测试危险代码拦截...');
+                            const dangerousCode = 'return constructor.constructor("return this")()';
+                            const validation = validateSlot(dangerousCode);
+                            log(`危险代码被拦截: ${!validation.ok ? '✅' : '❌'}`);
+
+                            log('测试安全代码执行...');
+                            const safeCode = 'return input.a + input.b';
+                            const result = await runSlot('test', safeCode, {a: 10, b: 20}, {});
+                            log(`安全代码执行结果: ${result.data} ${result.data === 30 ? '✅' : '❌'}`);
+
+                            return !validation.ok && result.data === 30;
+                        }
+                    },
+                    {
+                        id: 'security-eval-block',
+                        name: 'eval/Function 拦截测试',
+                        critical: true,
+                        testFn: async (log) => {
+                            const testCases = [
+                                { code: 'return eval("1+1")', desc: 'eval直接调用' },
+                                { code: 'return new Function("return 1+1")()', desc: 'Function构造' },
+                                { code: 'const e = eval; return e("1+1")', desc: 'eval间接引用' }
+                            ];
+
+                            let allBlocked = true;
+                            for (const test of testCases) {
+                                log(`测试 ${test.desc}...`);
+                                const validation = validateSlot(test.code);
+                                const blocked = !validation.ok;
+                                log(`${test.desc}: ${blocked ? '✅ 已拦截' : '❌ 未拦截'}`);
+                                allBlocked = allBlocked && blocked;
+                            }
+
+                            return allBlocked;
+                        }
+                    }
+                ]
+            },
+            {
+                name: '数据处理功能',
+                icon: '📊',
+                tests: [
+                    {
+                        id: 'data-rolling-window',
+                        name: '滚动窗口计算优化',
+                        critical: false,
+                        testFn: async (log) => {
+                            log('准备测试数据...');
+                            const testData = Array.from({length: 30}, (_, i) => ({
+                                weeklySales: 1000 + i * 10,
+                                fuelPrice: 3.5 + Math.random() * 0.5,
+                                temperature: 70 + Math.random() * 20,
+                                unemployment: 5 + Math.random() * 2,
+                                cpi: 200 + i * 0.1
+                            }));
+
+                            log('测试动量计算...');
+                            const momentum = dataProcessor.calculateMomentum(testData, 8);
+                            const validMomentum = momentum.filter(m => m !== null).length > 0;
+                            log(`动量计算: ${validMomentum ? '✅' : '❌'} (有效值: ${momentum.filter(m => m !== null).length})`);
+
+                            log('测试油价敏感度计算...');
+                            const fuelSens = dataProcessor.calculateFuelSensitivity(testData, 10);
+                            const validFuel = fuelSens.filter(f => f !== null).length > 0;
+                            log(`油价敏感度: ${validFuel ? '✅' : '❌'} (有效值: ${fuelSens.filter(f => f !== null).length})`);
+
+                            return validMomentum && validFuel;
+                        }
+                    },
+                    {
+                        id: 'data-feature-calc',
+                        name: '特征计算完整性',
+                        critical: false,
+                        testFn: async (log) => {
+                            log('加载CSV数据...');
+                            const response = await fetch('/Walmart.csv');
+                            const csvText = await response.text();
+                            const data = await dataProcessor.loadData(csvText);
+
+                            log(`数据加载成功: ${data.length} 条记录`);
+
+                            const storeFeatures = dataProcessor.storeFeatures;
+                            log(`计算了 ${storeFeatures.size} 个门店的特征`);
+
+                            // 检查第一个门店的特征
+                            const firstStore = storeFeatures.values().next().value;
+                            const features = ['momentum', 'holidayLift', 'fuelSensitivity', 'tempSensitivity', 'macroAdaptation', 'trend'];
+                            let allFeaturesExist = true;
+
+                            for (const feature of features) {
+                                const exists = firstStore[feature] !== undefined;
+                                log(`特征 ${feature}: ${exists ? '✅' : '❌'}`);
+                                allFeaturesExist = allFeaturesExist && exists;
+                            }
+
+                            return allFeaturesExist;
+                        }
+                    }
+                ]
+            },
+            {
+                name: '图表管理器',
+                icon: '📈',
+                tests: [
+                    {
+                        id: 'chart-scatter-total',
+                        name: '散点图分母计算',
+                        critical: true,
+                        testFn: (log) => {
+                            log('检查 getScatterTotalSum 方法...');
+                            const methodExists = typeof chartManager.getScatterTotalSum === 'function';
+                            log(`方法存在: ${methodExists ? '✅' : '❌'}`);
+
+                            if (methodExists) {
+                                log('测试计算逻辑...');
+                                // 模拟设置总销售额
+                                chartManager.scatterTotalSum = 1000000;
+                                const total = chartManager.getScatterTotalSum();
+                                log(`获取总销售额: ${total}`);
+                                return total === 1000000;
+                            }
+
+                            return methodExists;
+                        }
+                    },
+                    {
+                        id: 'chart-update-method',
+                        name: '图表更新方法',
+                        critical: false,
+                        testFn: (log) => {
+                            const methods = ['updateScatterChart', 'updateActivityChart', 'updateMissingDataChart'];
+                            let allExist = true;
+
+                            for (const method of methods) {
+                                const exists = typeof chartManager[method] === 'function';
+                                log(`${method}: ${exists ? '✅' : '❌'}`);
+                                allExist = allExist && exists;
+                            }
+
+                            return allExist;
+                        }
+                    }
+                ]
+            },
+            {
+                name: '参数管理器',
+                icon: '⚙️',
+                tests: [
+                    {
+                        id: 'param-validation',
+                        name: '参数验证机制',
+                        critical: false,
+                        testFn: (log) => {
+                            log('测试参数设置...');
+                            const testParam = 'feature.weights.momentum';
+                            const originalValue = paramManager.get(testParam);
+
+                            log(`原始值: ${originalValue}`);
+
+                            // 测试有效值
+                            paramManager.set(testParam, 0.5);
+                            const newValue = paramManager.get(testParam);
+                            log(`设置 0.5: ${newValue === 0.5 ? '✅' : '❌'}`);
+
+                            // 测试边界值
+                            paramManager.set(testParam, 0);
+                            const zeroValue = paramManager.get(testParam);
+                            log(`设置 0: ${zeroValue === 0 ? '✅' : '❌'}`);
+
+                            // 恢复原始值
+                            paramManager.set(testParam, originalValue);
+
+                            return newValue === 0.5 && zeroValue === 0;
+                        }
+                    },
+                    {
+                        id: 'param-schema',
+                        name: 'Schema 校验',
+                        critical: false,
+                        testFn: (log) => {
+                            log('测试权重参数范围...');
+                            const weights = paramManager.get('feature.weights');
+                            let allValid = true;
+
+                            for (const [key, value] of Object.entries(weights)) {
+                                const valid = value >= 0 && value <= 1;
+                                log(`${key}: ${value} ${valid ? '✅' : '❌'}`);
+                                allValid = allValid && valid;
+                            }
+
+                            return allValid;
+                        }
+                    }
+                ]
+            }
+        ];
+
+        // 渲染测试界面
+        function renderTests() {
+            const container = document.getElementById('test-container');
+            container.innerHTML = '';
+
+            testSuites.forEach(suite => {
+                const suiteDiv = document.createElement('div');
+                suiteDiv.className = 'test-category';
+                suiteDiv.innerHTML = `
+                    <h2>${suite.icon} ${suite.name}</h2>
+                    <div class="suite-tests"></div>
+                `;
+
+                const testsContainer = suiteDiv.querySelector('.suite-tests');
+
+                suite.tests.forEach(test => {
+                    const testDiv = document.createElement('div');
+                    testDiv.className = `test-item ${test.critical ? 'critical' : ''}`;
+                    testDiv.dataset.testId = test.id;
+                    testDiv.dataset.critical = test.critical;
+                    testDiv.innerHTML = `
+                        <div class="test-header">
+                            <span class="test-title">
+                                ${test.critical ? '🔴' : '⚪'} ${test.name}
+                            </span>
+                            <span class="test-status">待测试</span>
+                        </div>
+                        <button onclick="runSingleTest('${test.id}')">运行测试</button>
+                        <div class="result hidden"></div>
+                    `;
+                    testsContainer.appendChild(testDiv);
+                });
+
+                container.appendChild(suiteDiv);
+            });
+
+            updateStats();
+        }
+
+        // 运行单个测试
+        async function runSingleTest(testId) {
+            const test = findTestById(testId);
+            if (!test) return;
+
+            const testDiv = document.querySelector(`[data-test-id="${testId}"]`);
+            const resultDiv = testDiv.querySelector('.result');
+            const statusSpan = testDiv.querySelector('.test-status');
+
+            // 设置运行状态
+            testDiv.className = `test-item ${test.critical ? 'critical' : ''} running`;
+            statusSpan.textContent = '运行中...';
+            statusSpan.style.background = '#ffc107';
+            resultDiv.classList.remove('hidden');
+            resultDiv.innerHTML = '';
+
+            const log = (message) => {
+                resultDiv.innerHTML += message + '\n';
+            };
+
+            try {
+                const result = await test.testFn(log);
+
+                // 更新状态
+                if (result) {
+                    testDiv.className = `test-item ${test.critical ? 'critical' : ''} passed`;
+                    statusSpan.textContent = '✅ 通过';
+                    statusSpan.style.background = '#28a745';
+                    testState.results.set(testId, 'passed');
+                } else {
+                    testDiv.className = `test-item ${test.critical ? 'critical' : ''} failed`;
+                    statusSpan.textContent = '❌ 失败';
+                    statusSpan.style.background = '#dc3545';
+                    testState.results.set(testId, 'failed');
+                }
+            } catch (error) {
+                testDiv.className = `test-item ${test.critical ? 'critical' : ''} failed`;
+                statusSpan.textContent = '❌ 错误';
+                statusSpan.style.background = '#dc3545';
+                log(`错误: ${error.message}`);
+                testState.results.set(testId, 'failed');
+            }
+
+            updateStats();
+        }
+
+        // 运行所有测试
+        async function runAllTests() {
+            for (const suite of testSuites) {
+                for (const test of suite.tests) {
+                    await runSingleTest(test.id);
+                    await new Promise(resolve => setTimeout(resolve, 100)); // 小延迟以便观察进度
+                }
+            }
+        }
+
+        // 运行关键测试
+        async function runCriticalTests() {
+            for (const suite of testSuites) {
+                for (const test of suite.tests) {
+                    if (test.critical) {
+                        await runSingleTest(test.id);
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                }
+            }
+        }
+
+        // 清除结果
+        function clearResults() {
+            testState.results.clear();
+            document.querySelectorAll('.test-item').forEach(item => {
+                item.className = `test-item ${item.dataset.critical === 'true' ? 'critical' : ''}`;
+                item.querySelector('.test-status').textContent = '待测试';
+                item.querySelector('.test-status').style.background = '#6c757d';
+                item.querySelector('.result').classList.add('hidden');
+                item.querySelector('.result').innerHTML = '';
+            });
+            updateStats();
+        }
+
+        // 更新统计
+        function updateStats() {
+            const allTests = [];
+            testSuites.forEach(suite => {
+                suite.tests.forEach(test => allTests.push(test));
+            });
+
+            testState.stats.total = allTests.length;
+            testState.stats.passed = Array.from(testState.results.values()).filter(r => r === 'passed').length;
+            testState.stats.failed = Array.from(testState.results.values()).filter(r => r === 'failed').length;
+            testState.stats.pending = testState.stats.total - testState.stats.passed - testState.stats.failed;
+
+            document.getElementById('total-count').textContent = testState.stats.total;
+            document.getElementById('passed-count').textContent = testState.stats.passed;
+            document.getElementById('failed-count').textContent = testState.stats.failed;
+            document.getElementById('pending-count').textContent = testState.stats.pending;
+
+            // 更新进度条
+            const progress = ((testState.stats.passed + testState.stats.failed) / testState.stats.total) * 100;
+            const progressFill = document.getElementById('progress-fill');
+            progressFill.style.width = `${progress}%`;
+            progressFill.textContent = `${Math.round(progress)}%`;
+        }
+
+        // 过滤测试
+        function filterTests(filter) {
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            document.querySelectorAll('.test-item').forEach(item => {
+                const testId = item.dataset.testId;
+                const status = testState.results.get(testId);
+                const isCritical = item.dataset.critical === 'true';
+
+                let show = true;
+                switch(filter) {
+                    case 'critical':
+                        show = isCritical;
+                        break;
+                    case 'passed':
+                        show = status === 'passed';
+                        break;
+                    case 'failed':
+                        show = status === 'failed';
+                        break;
+                }
+
+                item.style.display = show ? 'block' : 'none';
+            });
+        }
+
+        // 导出报告
+        function exportResults() {
+            const report = {
+                timestamp: new Date().toISOString(),
+                stats: testState.stats,
+                results: []
+            };
+
+            testSuites.forEach(suite => {
+                suite.tests.forEach(test => {
+                    const status = testState.results.get(test.id) || 'pending';
+                    report.results.push({
+                        suite: suite.name,
+                        test: test.name,
+                        critical: test.critical,
+                        status: status
+                    });
+                });
+            });
+
+            const blob = new Blob([JSON.stringify(report, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `test-report-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 查找测试
+        function findTestById(testId) {
+            for (const suite of testSuites) {
+                const test = suite.tests.find(t => t.id === testId);
+                if (test) return test;
+            }
+            return null;
+        }
+
+        // 初始化
+        renderTests();
+
+        // 导出到全局
+        window.runSingleTest = runSingleTest;
+        window.runAllTests = runAllTests;
+        window.runCriticalTests = runCriticalTests;
+        window.clearResults = clearResults;
+        window.filterTests = filterTests;
+        window.exportResults = exportResults;
+    </script>
+</body>
+</html>
