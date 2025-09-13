@@ -42,7 +42,7 @@ export class ParameterPanel {
       { id: 'weights.holiday', label: '节日效应', value: weights.holiday },
       { id: 'weights.fuel', label: '油价敏感度(-)' , value: weights.fuel },
       { id: 'weights.temperature', label: '气温敏感度(-)', value: weights.temperature },
-      { id: 'weights.macro', label: '宏观敏感度(-)', value: weights.macro },
+      { id: 'weights.macro', label: '宏观敏感度(1-z)', value: weights.macro },
       { id: 'weights.trend', label: '稳健趋势', value: weights.trend }
     ])}
 
@@ -209,8 +209,13 @@ export class ParameterPanel {
     const selectId = event.target.id;
     const value = event.target.value;
 
-    // 简化类型转换 - 直接使用Number()，参数验证逻辑会处理NaN
-    paramManager.set(selectId, Number(value));
+    // 根据参数类型决定是否转换为数字
+    // timeWindow.weeks 和 display.tooltipWeeks 需要数字，scatter.* 保持字符串
+    const processedValue = (selectId === 'timeWindow.weeks' || selectId === 'display.tooltipWeeks')
+      ? Number(value)
+      : value;
+
+    paramManager.set(selectId, processedValue);
     this.triggerChartUpdate(selectId);
   }
 

@@ -452,7 +452,7 @@ export class ChartManager {
         { name: '节日效应', value: data.features.holidayLift, weight: weights.holiday },
         { name: '油价敏感度(-)', value: data.features.fuelSensitivity === null ? null : 1 - Math.abs(data.features.fuelSensitivity), weight: weights.fuel },
         { name: '气温敏感度(-)', value: data.features.tempSensitivity === null ? null : 1 - Math.abs(data.features.tempSensitivity), weight: weights.temperature },
-        { name: '宏观敏感度(-)', value: data.features.macroAdaptation === null ? null : 1 - data.features.macroAdaptation, weight: weights.macro },
+        { name: '宏观敏感度(1-z)', value: data.features.macroAdaptation === null ? null : 1 - data.features.macroAdaptation, weight: weights.macro },
         { name: '稳健趋势', value: data.features.trend, weight: weights.trend }
       ];
 
@@ -494,8 +494,8 @@ export class ChartManager {
   async formatScatterTooltip(params) {
     const data = params.data;
 
-    // 计算Share_t（当周该店销售额占当周总销售额的比例）
-    const weekTotal = this.getWeekTotalSumByYW(data.year, data.week);
+    // 计算Share_t（当周该店销售额占当前视图中同一周可见点的总销售额比例）
+    const weekTotal = this.getWeekTotalSumInCurrentView(data.year, data.week, 'scatter-chart');
     const share = weekTotal > 0 ? (data.weeklySales / weekTotal * 100).toFixed(2) : 0;
 
     // 计算WoW（基于ISO年-周）
@@ -719,6 +719,25 @@ export class ChartManager {
     const key = `${year}-${week}`;
     const aggregate = dataProcessor.weeklyAggregates.get(key);
     return aggregate ? aggregate.totalSales : 0;
+  }
+
+  /**
+   * 获取当前视图中指定周的总和
+   * @param {number} year - ISO年
+   * @param {number} week - ISO周
+   * @param {string} chartId - 图表ID
+   * @returns {number} 当前视图中该周所有可见点的销售额总和
+   */
+  getWeekTotalSumInCurrentView(year, week, chartId = 'scatter-chart') {
+    const chart = this.charts.get(chartId);
+    if (!chart) return 0;
+    const data = (chart.getOption().series?.[0]?.data) || [];
+    // 只累计当前视图可见数据里、同一ISO年-周的点
+    return data.reduce((s, d) => {
+      return (d.year === year && d.week === week)
+        ? s + (d.weeklySales ?? (d.value?.[1] ?? 0))
+        : s;
+    }, 0);
   }
 
   calculateTotalSum() {
