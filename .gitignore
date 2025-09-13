@@ -48,10 +48,11 @@ yarn-error.log*
 
 # Data files
 data/
-*.csv
 *.xlsx
-*.json
 !config/*.json
+!poc/package.json
+!poc/package-lock.json
+!poc/public/Walmart.csv
 
 # Temporary files
 tmp/
