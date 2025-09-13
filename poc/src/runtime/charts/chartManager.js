@@ -190,19 +190,26 @@ export class ChartManager {
     const chart = this.charts.get(chartId);
     if (!chart) return;
 
-    // 计算活跃度并排序
+    // 保留null值，标记NA状态
     const scored = data.map(store => ({
       ...store,
-      activity: this.calculateWeightedScore(store, weights)
+      activity: store.activity,
+      isNA: store.activity === null
     }));
 
-    scored.sort((a, b) => b.activity - a.activity);
+    // 排序：NA值放到最后
+    scored.sort((a, b) => {
+      if (a.isNA && b.isNA) return 0;
+      if (a.isNA) return 1;
+      if (b.isNA) return -1;
+      return b.activity - a.activity;
+    });
 
-    // 计算分位数颜色
-    const activities = scored.map(s => s.activity);
-    const q25 = this.quantile(activities, 0.25);
-    const q50 = this.quantile(activities, 0.5);
-    const q75 = this.quantile(activities, 0.75);
+    // 计算分位数颜色（只基于非NA值）
+    const validActivities = scored.filter(s => !s.isNA).map(s => s.activity);
+    const q25 = validActivities.length > 0 ? this.quantile(validActivities, 0.25) : 0;
+    const q50 = validActivities.length > 0 ? this.quantile(validActivities, 0.5) : 0;
+    const q75 = validActivities.length > 0 ? this.quantile(validActivities, 0.75) : 0;
 
     // 更新图表
     chart.setOption({
@@ -211,12 +218,13 @@ export class ChartManager {
       },
       series: [{
         data: scored.map(s => ({
-          value: s.activity,
+          value: s.isNA ? null : s.activity,
           itemStyle: {
-            color: this.getQuantileColor(s.activity, q25, q50, q75)
+            color: s.isNA ? '#cccccc' : this.getQuantileColor(s.activity, q25, q50, q75)
           },
           store: s.store,
-          features: s.features
+          features: s.features,
+          isNA: s.isNA
         }))
       }]
     });
@@ -410,7 +418,7 @@ export class ChartManager {
     const data = params[0].data;
 
     // 检查缓存
-    const cacheKey = `activity_${data.store}`;
+    const cacheKey = `activity_${data.store}_${data.isNA}`;
     if (this.tooltipCache.has(cacheKey)) {
       return this.tooltipCache.get(cacheKey);
     }
@@ -421,19 +429,31 @@ export class ChartManager {
         <div style="font-weight: bold; margin-bottom: 8px;">
           Store ${data.store}
         </div>
+    `;
+
+    if (data.isNA) {
+      html += `
+        <div style="color: #999;">活跃度评分: 不可用</div>
+        <div style="margin-top: 8px; font-size: 12px; color: #999;">
+          原因：存在NA特征值（数据不足）
+        </div>
+      `;
+    } else {
+      html += `
         <div>活跃度评分: ${data.value.toFixed(3)}</div>
         <div style="margin-top: 8px; font-size: 12px;">
           <div>贡献分解:</div>
-    `;
+      `;
 
     if (data.features) {
+      const weights = paramManager.get('weights');
       const contributions = [
-        { name: '近端动量', value: data.features.momentum },
-        { name: '节日效应', value: data.features.holidayLift },
-        { name: '油价敏感度(-)', value: data.features.fuelSensitivity === null ? null : 1 - Math.abs(data.features.fuelSensitivity) },
-        { name: '气温敏感度(-)', value: data.features.tempSensitivity === null ? null : 1 - Math.abs(data.features.tempSensitivity) },
-        { name: '宏观敏感度(-)', value: data.features.macroAdaptation === null ? null : 1 - Math.abs(data.features.macroAdaptation) },
-        { name: '稳健趋势', value: data.features.trend }
+        { name: '近端动量', value: data.features.momentum, weight: weights.momentum },
+        { name: '节日效应', value: data.features.holidayLift, weight: weights.holiday },
+        { name: '油价敏感度(-)', value: data.features.fuelSensitivity === null ? null : 1 - Math.abs(data.features.fuelSensitivity), weight: weights.fuel },
+        { name: '气温敏感度(-)', value: data.features.tempSensitivity === null ? null : 1 - Math.abs(data.features.tempSensitivity), weight: weights.temperature },
+        { name: '宏观敏感度(-)', value: data.features.macroAdaptation === null ? null : 1 - data.features.macroAdaptation, weight: weights.macro },
+        { name: '稳健趋势', value: data.features.trend, weight: weights.trend }
       ];
 
       contributions.forEach(c => {
@@ -445,19 +465,20 @@ export class ChartManager {
             </div>
           `;
         } else {
-          const color = c.value > 0 ? '#5470c6' : '#ee6666';
+          const weightedValue = c.weight * c.value;
+          const color = weightedValue > 0 ? '#5470c6' : '#ee6666';
           html += `
             <div style="display: flex; justify-content: space-between; margin: 2px 0;">
               <span>${c.name}:</span>
-              <span style="color: ${color}">${c.value.toFixed(3)}</span>
+              <span style="color: ${color}">${weightedValue.toFixed(3)}</span>
             </div>
           `;
         }
       });
     }
+    }
 
     html += `
-        </div>
       </div>
     `;
 
@@ -473,16 +494,53 @@ export class ChartManager {
   async formatScatterTooltip(params) {
     const data = params.data;
 
+    // 计算Share_t（当周该店销售额占当周总销售额的比例）
+    const weekTotal = this.getWeekTotalSumByYW(data.year, data.week);
+    const share = weekTotal > 0 ? (data.weeklySales / weekTotal * 100).toFixed(2) : 0;
+
+    // 计算WoW（基于ISO年-周）
+    const prevWeekData = (() => {
+      let y = data.year, w = data.week;
+      if (w > 1) {
+        w -= 1;
+      } else {
+        // 跨年：找上一年的最后一周
+        y -= 1;
+        // ISO周年的最后一周通常是52或53
+        const lastWeekDate = new Date(Date.UTC(y, 11, 28)); // 12月28日肯定在最后一周
+        w = dataProcessor.getISOWeek(lastWeekDate);
+      }
+      return dataProcessor.rawData.find(r => r.store === data.store && r.year === y && r.week === w);
+    })();
+
+    // 计算YoY
+    const prevYearData = dataProcessor.rawData.find(r =>
+      r.store === data.store &&
+      r.year === data.year - 1 &&
+      r.week === data.week
+    );
+
+    const wow = prevWeekData ? ((data.weeklySales - prevWeekData.weeklySales) / prevWeekData.weeklySales * 100).toFixed(1) : null;
+    const yoy = prevYearData ? ((data.weeklySales - prevYearData.weeklySales) / prevYearData.weeklySales * 100).toFixed(1) : null;
+
     // 获取迷你图数据
     const miniSeriesHtml = await this.createMiniSparkline(data);
+
+    // 判断节日标记（节日本周+前一周）
+    const holidayMark = data.holidayFlag || data.isHolidayWeek || data.isPreHolidayWeek;
 
     const html = `
       <div style="padding: 10px; min-width: 300px;">
         <div style="font-weight: bold;">Store ${data.store} - Week ${data.weekOfYear}</div>
         <div>销售额: ${this.formatNumber(data.weeklySales)}</div>
-        <div>温度: ${data.temperature}°F</div>
-        <div>油价: $${data.fuelPrice}</div>
-        ${data.holidayFlag ? '<div style="color: #ff6b6b;">🎄 节日周</div>' : ''}
+        <div>占比(Share_t): ${share}%</div>
+        ${wow !== null ? `<div>周环比(WoW): ${wow > 0 ? '+' : ''}${wow}%</div>` : ''}
+        ${yoy !== null ? `<div>年同比(YoY): ${yoy > 0 ? '+' : ''}${yoy}%</div>` : ''}
+        <div style="margin-top: 5px;">
+          <div>温度: ${data.temperature}°F</div>
+          <div>油价: $${data.fuelPrice}</div>
+        </div>
+        ${holidayMark ? '<div style="color: #ff6b6b; margin-top: 5px;">🎄 节日周</div>' : ''}
         <div style="margin-top: 10px;">
           <div style="font-size: 12px; color: #666;">近8周趋势:</div>
           ${miniSeriesHtml}
@@ -551,7 +609,7 @@ export class ChartManager {
               symbol: 'circle',
               symbolSize: 4,
               data: recentData
-                .map((d, i) => d.holidayFlag ? { coord: [i, d.weeklySales] } : null)
+                .map((d, i) => (d.holidayFlag || d.isHolidayWeek || d.isPreHolidayWeek) ? { coord: [i, d.weeklySales] } : null)
                 .filter(d => d !== null)
             }
           }]
@@ -577,18 +635,6 @@ export class ChartManager {
   }
 
   // 辅助函数
-  calculateWeightedScore(store, weights) {
-    if (!store.features) return 0;
-
-    const f = store.features;
-    return weights.momentum * (f.momentum || 0) +
-      weights.holiday * (f.holidayLift || 0) +
-      weights.fuel * (1 - Math.abs(f.fuelSensitivity || 0)) +
-      weights.temperature * (1 - Math.abs(f.tempSensitivity || 0)) +
-      weights.macro * (f.macroAdaptation || 0) +
-      weights.trend * (f.trend || 0);
-  }
-
   getActivityColor(value) {
     const colors = ['#ee6666', '#fac858', '#91cc75', '#5470c6'];
     if (value < -0.5) return colors[0];
@@ -662,6 +708,15 @@ export class ChartManager {
     if (!row) return 0;
 
     const key = `${row.year}-${row.week}`;
+    const aggregate = dataProcessor.weeklyAggregates.get(key);
+    return aggregate ? aggregate.totalSales : 0;
+  }
+
+  /**
+   * 通过年-周获取周总和
+   */
+  getWeekTotalSumByYW(year, week) {
+    const key = `${year}-${week}`;
     const aggregate = dataProcessor.weeklyAggregates.get(key);
     return aggregate ? aggregate.totalSales : 0;
   }

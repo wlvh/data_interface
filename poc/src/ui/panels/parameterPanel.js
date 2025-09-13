@@ -196,7 +196,7 @@ export class ParameterPanel {
       this.debounceTimers.delete(path);
 
       // 触发图表更新
-      this.triggerChartUpdate();
+      this.triggerChartUpdate(path);
     }, 300); // 300ms防抖
 
     this.debounceTimers.set(path, timer);
@@ -213,7 +213,7 @@ export class ParameterPanel {
     const numValue = isNaN(value) ? value : Number(value);
 
     paramManager.set(selectId, numValue);
-    this.triggerChartUpdate();
+    this.triggerChartUpdate(selectId);
   }
 
   /**
@@ -262,13 +262,14 @@ export class ParameterPanel {
   /**
    * 触发图表更新
    */
-  triggerChartUpdate() {
+  triggerChartUpdate(changedPath = null) {
     // 发送自定义事件
     window.dispatchEvent(new CustomEvent('parametersChanged', {
       detail: {
         weights: paramManager.get('weights'),
         timeWindow: paramManager.get('timeWindow'),
-        scatter: paramManager.get('scatter')
+        scatter: paramManager.get('scatter'),
+        changedPath: changedPath
       }
     }));
   }

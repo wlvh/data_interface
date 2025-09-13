@@ -3,18 +3,26 @@
  * 仅在 Worker 线程运行，安全执行槽位代码
  */
 
-// 禁用的模式（更严格的白名单校验）
-const FORBIDDEN_PATTERNS = [
-  /constructor\s*\.\s*constructor/,
-  /__proto__/,
-  /\beval\s*\(/,
-  /\bnew\s+Function\b/,
-  /\bimport\s*\(/,
-  /\bfetch\b|\bXMLHttpRequest\b|\bWebSocket\b/
-];
+importScripts('https://unpkg.com/acorn@8.15.0/dist/acorn.js');
+
+// 黑名单标识符
+const BLACKLISTED_IDENTIFIERS = new Set([
+  'eval', 'Function', 'constructor', '__proto__',
+  'window', 'document', 'fetch', 'XMLHttpRequest',
+  'WebSocket', 'importScripts', 'self', 'globalThis',
+  'require', 'module', 'exports', 'process'
+]);
+
+// 禁止的AST节点类型
+const FORBIDDEN_NODE_TYPES = new Set([
+  'ImportDeclaration', 'ImportExpression',
+  'ExportNamedDeclaration', 'ExportDefaultDeclaration',
+  'WithStatement', 'MetaProperty',
+  'ImportAttribute', 'DynamicImport'
+]);
 
 /**
- * 验证槽位代码安全性
+ * 验证槽位代码安全性（使用AST）
  */
 function validateSlot(code) {
   const errors = [];
@@ -24,12 +32,59 @@ function validateSlot(code) {
     errors.push('Function must have a return statement');
   }
 
-  // 检查禁用模式
-  FORBIDDEN_PATTERNS.forEach(re => {
-    if (re.test(code)) {
-      errors.push(`Forbidden pattern: ${re}`);
+  // AST解析和检查
+  try {
+    const ast = self.acorn.parse(code, {
+      ecmaVersion: 2020,
+      sourceType: 'script'
+    });
+
+    // 递归遍历AST节点
+    function walkNode(node) {
+      if (!node) return;
+
+      // 检查节点类型
+      if (FORBIDDEN_NODE_TYPES.has(node.type)) {
+        errors.push(`Forbidden node type: ${node.type}`);
+      }
+
+      // 检查标识符
+      if (node.type === 'Identifier' && BLACKLISTED_IDENTIFIERS.has(node.name)) {
+        errors.push(`Blacklisted identifier: ${node.name}`);
+      }
+
+      // 检查new表达式
+      if (node.type === 'NewExpression') {
+        if (node.callee.type === 'Identifier' && node.callee.name === 'Function') {
+          errors.push('new Function is not allowed');
+        }
+      }
+
+      // 检查成员访问
+      if (node.type === 'MemberExpression') {
+        if (node.property.type === 'Identifier') {
+          if (node.property.name === '__proto__' || node.property.name === 'constructor') {
+            errors.push(`Dangerous property access: ${node.property.name}`);
+          }
+        }
+      }
+
+      // 递归遍历子节点
+      for (const key in node) {
+        if (node[key] && typeof node[key] === 'object') {
+          if (Array.isArray(node[key])) {
+            node[key].forEach(walkNode);
+          } else if (node[key].type) {
+            walkNode(node[key]);
+          }
+        }
+      }
     }
-  });
+
+    walkNode(ast);
+  } catch (parseError) {
+    errors.push(`Parse error: ${parseError.message}`);
+  }
 
   return { ok: errors.length === 0, errors };
 }
@@ -141,6 +196,7 @@ self.onmessage = (e) => {
   // 构建安全的执行环境
   const wrapped = `
     'use strict';
+    const _Math = globalThis.Math;
     const window = undefined;
     const document = undefined;
     const globalThis = undefined;
@@ -151,22 +207,22 @@ self.onmessage = (e) => {
     const WebSocket = undefined;
     const Date = undefined;
     const Math = Object.freeze({
-      abs: Math.abs,
-      floor: Math.floor,
-      ceil: Math.ceil,
-      round: Math.round,
-      min: Math.min,
-      max: Math.max,
-      pow: Math.pow,
-      sqrt: Math.sqrt,
-      log: Math.log,
-      log1p: Math.log1p || (x => Math.log(1 + x)),
-      exp: Math.exp,
-      sin: Math.sin,
-      cos: Math.cos,
-      tan: Math.tan,
-      PI: Math.PI,
-      E: Math.E
+      abs: _Math.abs,
+      floor: _Math.floor,
+      ceil: _Math.ceil,
+      round: _Math.round,
+      min: _Math.min,
+      max: _Math.max,
+      pow: _Math.pow,
+      sqrt: _Math.sqrt,
+      log: _Math.log,
+      log1p: _Math.log1p || (x => _Math.log(1 + x)),
+      exp: _Math.exp,
+      sin: _Math.sin,
+      cos: _Math.cos,
+      tan: _Math.tan,
+      PI: _Math.PI,
+      E: _Math.E
     });
 
     return (function(input, params, utils) {
