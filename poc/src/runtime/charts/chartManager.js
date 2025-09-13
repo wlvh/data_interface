@@ -452,7 +452,7 @@ export class ChartManager {
         { name: '节日效应', value: data.features.holidayLift, weight: weights.holiday },
         { name: '油价敏感度(-)', value: data.features.fuelSensitivity === null ? null : 1 - Math.abs(data.features.fuelSensitivity), weight: weights.fuel },
         { name: '气温敏感度(-)', value: data.features.tempSensitivity === null ? null : 1 - Math.abs(data.features.tempSensitivity), weight: weights.temperature },
-        { name: '宏观敏感度(-)', value: data.features.macroAdaptation === null ? null : 1 - data.features.macroAdaptation, weight: weights.macro },
+        { name: '宏观敏感度(1-z)', value: data.features.macroAdaptation === null ? null : 1 - data.features.macroAdaptation, weight: weights.macro },
         { name: '稳健趋势', value: data.features.trend, weight: weights.trend }
       ];
 

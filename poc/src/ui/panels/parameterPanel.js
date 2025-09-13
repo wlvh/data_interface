@@ -42,7 +42,7 @@ export class ParameterPanel {
       { id: 'weights.holiday', label: '节日效应', value: weights.holiday },
       { id: 'weights.fuel', label: '油价敏感度(-)' , value: weights.fuel },
       { id: 'weights.temperature', label: '气温敏感度(-)', value: weights.temperature },
-      { id: 'weights.macro', label: '宏观敏感度(-)', value: weights.macro },
+      { id: 'weights.macro', label: '宏观敏感度(1-z)', value: weights.macro },
       { id: 'weights.trend', label: '稳健趋势', value: weights.trend }
     ])}
 
