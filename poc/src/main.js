@@ -75,22 +75,17 @@ class DataInterfaceApp {
    */
   prepareLatestData() {
     // 找出全局最新日期
-    const dates = this.data.map(d => d.dateObj);
-    this.latestDate = new Date(Math.max(...dates));
+    this.latestDate = new Date(Math.max(...this.data.map(d => d.dateObj)));
 
-    // 缓存每个门店的最新数据（跳过前面窗口不足的周）
-    this.latestDataByStore.clear();
-
-    for (const row of this.data) {
-      // 跳过太早的数据（前26周用于滚动窗口计算）
+    // 使用reduce构建最新数据缓存（跳过前26周不足数据）
+    this.latestDataByStore = this.data.reduce((map, row) => {
       const weeksDiff = Math.floor((this.latestDate - row.dateObj) / (7 * 24 * 60 * 60 * 1000));
-      if (weeksDiff > 26) continue;
-
-      if (!this.latestDataByStore.has(row.store) ||
-          row.dateObj > this.latestDataByStore.get(row.store).dateObj) {
-        this.latestDataByStore.set(row.store, row);
+      if (weeksDiff <= 26) {
+        const cached = map.get(row.store);
+        if (!cached || row.dateObj > cached.dateObj) map.set(row.store, row);
       }
-    }
+      return map;
+    }, new Map());
 
     console.log(`预处理完成: ${this.latestDataByStore.size} 个门店的最新数据已缓存`);
   }
@@ -103,17 +98,11 @@ class DataInterfaceApp {
     this.paramPanel = new ParameterPanel('param-panel');
     this.paramPanel.init();
 
-    // 设置导出按钮
-    const exportBtn = document.getElementById('export-btn');
-    if (exportBtn) {
-      exportBtn.addEventListener('click', () => this.exportSnapshot());
-    }
-
-    // 设置导入按钮
-    const importBtn = document.getElementById('import-btn');
-    if (importBtn) {
-      importBtn.addEventListener('click', () => this.importSnapshot());
-    }
+    // 绑定导出/导入按钮
+    ['export', 'import'].forEach(action => {
+      const btn = document.getElementById(`${action}-btn`);
+      if (btn) btn.addEventListener('click', () => this[`${action}Snapshot`]());
+    });
   }
 
   /**
@@ -178,15 +167,13 @@ class DataInterfaceApp {
    * 更新所有图表
    */
   updateAllCharts() {
-    const weights = paramManager.get('weights');
-    const timeWindow = paramManager.get('timeWindow');
-    const scatterConfig = paramManager.get('scatter');
-
-    // 更新活跃度图表
+    const { params } = paramManager.getSnapshot();
+    const { weights, timeWindow, scatter } = params || {};
+    if (!weights || !timeWindow || !scatter) {
+      throw new Error('必要参数缺失');
+    }
     this.updateActivityChart(weights, timeWindow);
-
-    // 更新散点图
-    this.updateScatterChart(scatterConfig);
+    this.updateScatterChart(scatter);
   }
 
   /**
@@ -239,155 +226,6 @@ class DataInterfaceApp {
     );
   }
 
-  /**
-   * 获取最新周数据（使用缓存）
-   */
-  getLatestWeekData() {
-    if (!this.latestDate) return [];
-
-    // 获取最新周的数据
-    return this.data.filter(d => {
-      const diff = Math.abs(d.dateObj - this.latestDate);
-      return diff < 7 * 24 * 60 * 60 * 1000; // 一周内
-    });
-  }
-
-  // 以下两个方法已移至chartManager.js，这里保留为空避免调用错误
-  /**
-   * 处理选择变化（已废弃，功能移至chartManager.js）
-   */
-  async handleSelectionChange_deprecated(selectedPoints) {
-    if (selectedPoints.length === 0) {
-      document.getElementById('aggregate-card').style.display = 'none';
-      return;
-    }
-
-    // 使用Worker槽位计算聚合统计
-    const aggregateCode = `
-      const values = input.points.map(p => p.weeklySales || p.value[1]);
-      const count = input.points.length;
-      const sum = utils.sum(values);
-      const mean = utils.mean(values);
-      const median = utils.median(values);
-      const stdev = utils.stdev(values);
-
-      // 计算占比（基于筛选后的总和）
-      const share = params.totalSum > 0 ? sum / params.totalSum : 0;
-
-      // 计算局部斜率（样本充足才计算）
-      let slope = null;
-      if (count >= 5) {
-        const xValues = input.points.map(p => p[params.xField] || p.value[0]);
-        const meanX = utils.mean(xValues);
-        const meanY = mean;
-        let numerator = 0;
-        let denominator = 0;
-
-        for (let i = 0; i < count; i++) {
-          numerator += (xValues[i] - meanX) * (values[i] - meanY);
-          denominator += (xValues[i] - meanX) * (xValues[i] - meanX);
-        }
-
-        slope = denominator === 0 ? 0 : numerator / denominator;
-      }
-
-      return {
-        count,
-        sum,
-        mean,
-        median,
-        stdev,
-        share,
-        slope
-      };
-    `;
-
-    try {
-      // 获取当前筛选上下文的总和（使用散点图当前显示的数据）
-      const totalSum = chartManager.getScatterTotalSum('scatter-chart');
-      const xField = paramManager.get('scatter.xField');
-
-      const result = await runSlot(
-        'aggregate',
-        aggregateCode,
-        { points: selectedPoints },
-        { totalSum, xField },
-        {
-          timeout: 1000,
-          outputSchema: {
-            type: 'object',
-            properties: {
-              count: {},
-              sum: {},
-              mean: {},
-              median: {},
-              stdev: {},
-              share: {},
-              slope: { optional: true }
-            }
-          }
-        }
-      );
-
-      if (result.ok) {
-        this.displayAggregateCard_deprecated(result.data);
-      } else {
-        console.error('聚合计算失败:', result.error);
-      }
-    } catch (error) {
-      console.error('Worker执行失败:', error);
-    }
-  }
-
-  /**
-   * 显示聚合卡片（已废弃，功能移至chartManager.js）
-   */
-  displayAggregateCard_deprecated(stats) {
-    const card = document.getElementById('aggregate-card');
-    if (!card) return;
-
-    const formatNumber = (num) => new Intl.NumberFormat('en-US').format(Math.round(num));
-
-    card.innerHTML = `
-      <div class="card-header">
-        <h4>选中区域统计</h4>
-      </div>
-      <div class="card-body">
-        <div class="stat-row">
-          <span class="stat-label">数量:</span>
-          <span class="stat-value">${stats.count}</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">总和:</span>
-          <span class="stat-value">$${formatNumber(stats.sum)}</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">均值:</span>
-          <span class="stat-value">$${formatNumber(stats.mean)}</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">中位数:</span>
-          <span class="stat-value">$${formatNumber(stats.median)}</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">标准差:</span>
-          <span class="stat-value">${formatNumber(stats.stdev)}</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">占比:</span>
-          <span class="stat-value">${(stats.share * 100).toFixed(2)}%</span>
-        </div>
-        ${stats.slope !== null ? `
-        <div class="stat-row">
-          <span class="stat-label">局部斜率:</span>
-          <span class="stat-value">${stats.slope.toFixed(2)}</span>
-        </div>
-        ` : ''}
-      </div>
-    `;
-
-    card.style.display = 'block';
-  }
 
   /**
    * 导出快照
