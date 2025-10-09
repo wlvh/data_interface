@@ -52,7 +52,7 @@ class ValueRange(ContractModel):
     )
 
     @model_validator(mode="after")
-    def validate_range(cls, data: "ValueRange") -> "ValueRange":
+    def validate_range(self) -> "ValueRange":
         """校验值域配置的互斥与配对关系。
 
         * 当 ``categories`` 存在时，必须同时提供 ``top_k_frequencies`` 且长度一致。
@@ -60,21 +60,21 @@ class ValueRange(ContractModel):
         * 若同时设置 ``minimum`` 与 ``maximum``，则 ``minimum`` 不能大于 ``maximum``。
         """
 
-        has_categories = data.categories is not None
-        has_frequencies = data.top_k_frequencies is not None
+        has_categories = self.categories is not None
+        has_frequencies = self.top_k_frequencies is not None
         if has_categories != has_frequencies:
             raise ValueError(
                 "categories 与 top_k_frequencies 必须同时提供，或同时为空。",
             )
         if has_categories:
-            if len(data.categories) != len(data.top_k_frequencies):
+            if len(self.categories) != len(self.top_k_frequencies):
                 raise ValueError("categories 与 top_k_frequencies 长度必须一致。")
-        if data.minimum is not None and data.maximum is not None:
-            if data.minimum > data.maximum:
+        if self.minimum is not None and self.maximum is not None:
+            if self.minimum > self.maximum:
                 raise ValueError("minimum 不能大于 maximum。")
-        if data.minimum is not None and has_categories:
+        if self.minimum is not None and has_categories:
             raise ValueError("数值范围与类别枚举不能同时出现。")
-        return data
+        return self
 
 
 class FieldStatistics(ContractModel):
@@ -118,23 +118,23 @@ class FieldStatistics(ContractModel):
     )
 
     @model_validator(mode="after")
-    def validate_statistics(cls, data: "FieldStatistics") -> "FieldStatistics":
+    def validate_statistics(self) -> "FieldStatistics":
         """确保统计量之间的基本约束关系成立。"""
 
-        if data.missing_count > data.total_count:
+        if self.missing_count > self.total_count:
             raise ValueError("缺失数量不能超过总数。")
-        if data.total_count == 0:
-            if data.missing_count != 0:
+        if self.total_count == 0:
+            if self.missing_count != 0:
                 raise ValueError("total_count 为 0 时不应出现缺失值计数。")
-            if data.missing_ratio != 0.0:
+            if self.missing_ratio != 0.0:
                 raise ValueError("total_count 为 0 时缺失率必须为 0。")
         else:
-            ratio = data.missing_count / data.total_count
-            if abs(ratio - data.missing_ratio) > 1e-6:
+            ratio = self.missing_count / self.total_count
+            if abs(ratio - self.missing_ratio) > 1e-6:
                 raise ValueError("缺失率与缺失数量不一致。")
-        if data.distinct_count is not None and data.distinct_count > data.total_count:
+        if self.distinct_count is not None and self.distinct_count > self.total_count:
             raise ValueError("唯一值数量不能超过总数。")
-        return data
+        return self
 
 
 class FieldSchema(ContractModel):
@@ -192,7 +192,7 @@ class FieldSchema(ContractModel):
     sample_values: List[str] = Field(
         default_factory=list,
         description="可展示给用户的示例取值列表，按字符串形式存储。",
-        max_items=20,
+        max_length=20,
     )
     value_range: Optional[ValueRange] = Field(
         default=None,
@@ -203,16 +203,16 @@ class FieldSchema(ContractModel):
     )
 
     @model_validator(mode="after")
-    def validate_samples(cls, data: "FieldSchema") -> "FieldSchema":
+    def validate_samples(self) -> "FieldSchema":
         """确保示例值数量与字段类型匹配。"""
 
-        if data.sample_values and data.semantic_type == "measure":
+        if self.sample_values and self.semantic_type == "measure":
             # 度量字段的示例值仅用于展示，不允许超过三条以控制上下文大小。
-            if len(data.sample_values) > 3:
+            if len(self.sample_values) > 3:
                 raise ValueError("度量字段的示例值不能超过 3 个。")
-        if data.semantic_type == "temporal" and data.data_type != "datetime":
+        if self.semantic_type == "temporal" and self.data_type != "datetime":
             raise ValueError("时间语义字段必须声明为 datetime 类型。")
-        if data.statistics.missing_count > 0 and not data.nullable:
+        if self.statistics.missing_count > 0 and not self.nullable:
             raise ValueError("存在缺失值的字段必须标记为可为空。")
-        return data
+        return self
 

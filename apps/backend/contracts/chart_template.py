@@ -52,15 +52,15 @@ class ChartEncoding(ContractModel):
     )
 
     @model_validator(mode="after")
-    def validate_measure_aggregate(cls, data: "ChartEncoding") -> "ChartEncoding":
+    def validate_measure_aggregate(self) -> "ChartEncoding":
         """校验聚合配置与语义角色的匹配关系。"""
 
-        if data.aggregate is not None and data.semantic_role != "measure":
+        if self.aggregate is not None and self.semantic_role != "measure":
             raise ValueError("仅度量通道允许声明聚合方式。")
-        if data.allow_multiple is False and data.required is False:
+        if self.allow_multiple is False and self.required is False:
             # 非必填且仅允许单字段的场景提醒上层进行二次校验，避免误用。
-            return data
-        return data
+            return self
+        return self
 
 
 class ChartTemplate(ContractModel):
@@ -93,7 +93,7 @@ class ChartTemplate(ContractModel):
     ] = Field(description="对应的可视化基础图元类型。")
     encodings: List[ChartEncoding] = Field(
         description="模板支持的编码通道集合。",
-        min_items=1,
+        min_length=1,
     )
     default_config: Dict[str, object] = Field(
         default_factory=dict,
@@ -101,19 +101,19 @@ class ChartTemplate(ContractModel):
     )
     supported_engines: List[Literal["vega-lite", "echarts"]] = Field(
         description="模板兼容的渲染引擎列表。",
-        min_items=1,
+        min_length=1,
     )
 
     @model_validator(mode="after")
-    def validate_template(cls, data: "ChartTemplate") -> "ChartTemplate":
+    def validate_template(self) -> "ChartTemplate":
         """校验模板的基础约束。"""
 
-        required_channels = [item.channel for item in data.encodings if item.required]
+        required_channels = [item.channel for item in self.encodings if item.required]
         if len(set(required_channels)) != len(required_channels):
             raise ValueError("模板中的必填编码通道不能重复。")
 
         channel_counts: Dict[str, int] = {}
-        for encoding in data.encodings:
+        for encoding in self.encodings:
             if encoding.channel in channel_counts:
                 channel_counts[encoding.channel] = channel_counts[encoding.channel] + 1
             else:
@@ -126,8 +126,8 @@ class ChartTemplate(ContractModel):
                 raise ValueError("除 tooltip/detail 外的编码通道必须全局唯一。")
 
         try:
-            json.dumps(data.default_config)
+            json.dumps(self.default_config)
         except TypeError as exc:
             raise ValueError("default_config 必须可 JSON 序列化。") from exc
-        return data
+        return self
 

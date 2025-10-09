@@ -1,29 +1,164 @@
 {
-  "title": "FieldSchema",
-  "type": "object",
+  "$defs": {
+    "FieldStatistics": {
+      "additionalProperties": false,
+      "description": "字段的基础统计指标。\n\n该模型聚焦于用于可视化和质量监控的核心指标，不参与任何隐式推断。\n缺失率与唯一值计数均需通过数据扫描流程显式计算并写入。所有比率\n均在 ``[0, 1]`` 范围内，使用浮点数并保留中间精度。",
+      "properties": {
+        "total_count": {
+          "description": "扫描窗口内的记录总数，要求为非负整数。",
+          "minimum": 0,
+          "title": "Total Count",
+          "type": "integer"
+        },
+        "missing_count": {
+          "description": "缺失值数量，必须小于等于 total_count。",
+          "minimum": 0,
+          "title": "Missing Count",
+          "type": "integer"
+        },
+        "distinct_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "唯一值数量，适用于类别或标识字段。",
+          "title": "Distinct Count"
+        },
+        "missing_ratio": {
+          "description": "缺失率，范围为 [0, 1]。",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Missing Ratio",
+          "type": "number"
+        },
+        "entropy": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "离散字段的信息熵，用于辅助排序和推荐。",
+          "title": "Entropy"
+        }
+      },
+      "required": [
+        "total_count",
+        "missing_count",
+        "missing_ratio"
+      ],
+      "title": "FieldStatistics",
+      "type": "object"
+    },
+    "ValueRange": {
+      "additionalProperties": false,
+      "description": "字段的值域信息。\n\n该模型既服务于数值字段，也服务于分类型字段，用以约束可视化和\n质量检测阶段的边界条件。对于数值字段，使用 ``minimum`` 与 ``maximum``\n描述上下界；对于类别字段，则通过 ``categories`` 与 ``top_k_frequencies``\n列出受控的取值集合及其频次。所有取值均应基于 UTC 时间窗口内计算。",
+      "properties": {
+        "minimum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "字段在扫描窗口内的最小值，仅适用于数值字段。",
+          "title": "Minimum"
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "字段在扫描窗口内的最大值，仅适用于数值字段。",
+          "title": "Maximum"
+        },
+        "categories": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "按频次降序排列的类别取值列表，仅适用于类别字段。",
+          "title": "Categories"
+        },
+        "top_k_frequencies": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "与 categories 对应的频次列表，用于前端显示 Top-K。",
+          "title": "Top K Frequencies"
+        }
+      },
+      "title": "ValueRange",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "字段契约描述。\n\n每个字段契约都需要明确数据类型、语义角色以及可视化所需的补充信息。\n该模型既被数据扫描服务使用，也被图表模板、规划与执行模块共用。",
   "properties": {
     "name": {
-      "type": "string",
+      "description": "字段的原始名称。",
       "minLength": 1,
-      "description": "字段的原始名称。"
+      "title": "Name",
+      "type": "string"
     },
     "path": {
-      "type": "array",
+      "description": "字段在嵌套结构中的访问路径，按层级排列。",
       "items": {
         "type": "string"
       },
-      "description": "字段在嵌套结构中的访问路径，按层级排列。"
+      "title": "Path",
+      "type": "array"
     },
     "title": {
       "anyOf": [
         {
           "type": "string"
         },
-        {}
+        {
+          "type": "null"
+        }
       ],
-      "description": "面向用户展示的字段标题，可选。"
+      "default": null,
+      "description": "面向用户展示的字段标题，可选。",
+      "title": "Title"
     },
     "data_type": {
+      "description": "字段的基础数据类型。",
       "enum": [
         "integer",
         "number",
@@ -31,10 +166,11 @@
         "string",
         "datetime"
       ],
-      "type": "string",
-      "description": "字段的基础数据类型。"
+      "title": "Data Type",
+      "type": "string"
     },
     "semantic_type": {
+      "description": "字段的语义类型，用于图表推荐与校验。",
       "enum": [
         "dimension",
         "measure",
@@ -43,53 +179,67 @@
         "geo",
         "unknown"
       ],
-      "type": "string",
-      "description": "字段的语义类型，用于图表推荐与校验。"
+      "title": "Semantic Type",
+      "type": "string"
     },
     "nullable": {
-      "type": "boolean",
-      "description": "字段是否允许缺失值。"
+      "description": "字段是否允许缺失值。",
+      "title": "Nullable",
+      "type": "boolean"
     },
     "unit": {
       "anyOf": [
         {
           "type": "string"
         },
-        {}
+        {
+          "type": "null"
+        }
       ],
-      "description": "字段的度量单位，例如 USD、% 等。"
+      "default": null,
+      "description": "字段的度量单位，例如 USD、% 等。",
+      "title": "Unit"
     },
     "description": {
       "anyOf": [
         {
           "type": "string"
         },
-        {}
+        {
+          "type": "null"
+        }
       ],
-      "description": "字段的业务描述，用于提示与文档。"
+      "default": null,
+      "description": "字段的业务描述，用于提示与文档。",
+      "title": "Description"
     },
     "tags": {
-      "type": "array",
+      "description": "与字段相关的标签集合，可用于检索。",
       "items": {
         "type": "string"
       },
-      "description": "与字段相关的标签集合，可用于检索。"
+      "title": "Tags",
+      "type": "array"
     },
     "sample_values": {
-      "type": "array",
+      "description": "可展示给用户的示例取值列表，按字符串形式存储。",
       "items": {
         "type": "string"
       },
       "maxItems": 20,
-      "description": "可展示给用户的示例取值列表，按字符串形式存储。"
+      "title": "Sample Values",
+      "type": "array"
     },
     "value_range": {
       "anyOf": [
         {
           "$ref": "#/$defs/ValueRange"
         },
-        {}
+        {
+          "type": "null"
+        }
       ],
+      "default": null,
       "description": "字段的值域信息。"
     },
     "statistics": {
@@ -104,107 +254,9 @@
     "nullable",
     "statistics"
   ],
-  "$defs": {
-    "ValueRange": {
-      "title": "ValueRange",
-      "type": "object",
-      "properties": {
-        "minimum": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {}
-          ],
-          "description": "字段在扫描窗口内的最小值，仅适用于数值字段。"
-        },
-        "maximum": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {}
-          ],
-          "description": "字段在扫描窗口内的最大值，仅适用于数值字段。"
-        },
-        "categories": {
-          "anyOf": [
-            {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            {}
-          ],
-          "description": "按频次降序排列的类别取值列表，仅适用于类别字段。"
-        },
-        "top_k_frequencies": {
-          "anyOf": [
-            {
-              "type": "array",
-              "items": {
-                "type": "integer"
-              }
-            },
-            {}
-          ],
-          "description": "与 categories 对应的频次列表，用于前端显示 Top-K。"
-        }
-      },
-      "additionalProperties": false
-    },
-    "FieldStatistics": {
-      "title": "FieldStatistics",
-      "type": "object",
-      "properties": {
-        "total_count": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "扫描窗口内的记录总数，要求为非负整数。"
-        },
-        "missing_count": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "缺失值数量，必须小于等于 total_count。"
-        },
-        "distinct_count": {
-          "anyOf": [
-            {
-              "type": "integer",
-              "minimum": 0
-            },
-            {}
-          ],
-          "description": "唯一值数量，适用于类别或标识字段。"
-        },
-        "missing_ratio": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 1.0,
-          "description": "缺失率，范围为 [0, 1]。"
-        },
-        "entropy": {
-          "anyOf": [
-            {
-              "type": "number",
-              "minimum": 0.0
-            },
-            {}
-          ],
-          "description": "离散字段的信息熵，用于辅助排序和推荐。"
-        }
-      },
-      "required": [
-        "total_count",
-        "missing_count",
-        "missing_ratio"
-      ],
-      "additionalProperties": false
-    }
-  },
+  "title": "FieldSchema",
+  "type": "object",
   "$id": "https://schemas.data-interface.local/contracts/field_schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0",
-  "additionalProperties": false
+  "version": "1.0.0"
 }

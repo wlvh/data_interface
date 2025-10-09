@@ -102,7 +102,7 @@ data_interface/
 
 ### 版本同步说明
 
-- 后端契约通过自定义的轻量级 `pydantic` 兼容层生成 JSONSchema，确保在无法联网安装依赖的环境下仍能进行模型校验。
+- 后端契约直接依赖官方 `pydantic` 库生成 JSONSchema，保持与最新校验能力同步。
 - 更新契约模型后需运行 `python apps/backend/tests/test_contract_schemas.py` 或 `pytest` 以重建 `schema/*.json` 并验证镜像一致性。
 
 ## 功能详解
