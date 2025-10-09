@@ -161,3 +161,12 @@ npm run build
 ## License
 
 MIT
+
+## TODO
+
+- [ ] 建立后端最小 API (`/api/data/scan`, `/api/task/submit`, `/api/task/stream`, `/api/trace/:task_id`, `/api/trace/replay`) 及扫描落盘服务，满足双落盘与回放要求。
+- [ ] 引入 Redux Toolkit、RTK Query、SSE 客户端与 ChartSpec 适配层，完成前端 Store 重构与可回放视图态。
+- [ ] 配置 `.pre-commit-config.yaml` 与 CI 工作流，落实契约镜像门禁与体积限制等质量门。
+- [ ] 补齐安全与性能修复（UTC 全链路、圈选抽样、tooltip 贡献、图例、快照哈希、fetch 守卫、Worker 并发协议等）。
+- [ ] 规划可选增强（ChartSpec 扩展、Trace 指标、FolderCard/Ingestion）并补充自动化覆盖。
+
