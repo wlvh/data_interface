@@ -1,0 +1,155 @@
+{
+  "title": "ChartTemplate",
+  "type": "object",
+  "properties": {
+    "template_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "模板唯一标识。"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "模板版本号。"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "模板名称。"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {}
+      ],
+      "description": "模板说明，用于提示合适的使用场景。"
+    },
+    "mark": {
+      "enum": [
+        "bar",
+        "line",
+        "area",
+        "point",
+        "pie",
+        "heatmap",
+        "table",
+        "boxplot"
+      ],
+      "type": "string",
+      "description": "对应的可视化基础图元类型。"
+    },
+    "encodings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ChartEncoding"
+      },
+      "minItems": 1,
+      "description": "模板支持的编码通道集合。"
+    },
+    "default_config": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {},
+      "description": "可直接传给渲染引擎的默认配置片段。"
+    },
+    "supported_engines": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "vega-lite",
+          "echarts"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "description": "模板兼容的渲染引擎列表。"
+    }
+  },
+  "required": [
+    "template_id",
+    "version",
+    "name",
+    "mark",
+    "encodings",
+    "supported_engines"
+  ],
+  "$defs": {
+    "ChartEncoding": {
+      "title": "ChartEncoding",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "enum": [
+            "x",
+            "y",
+            "color",
+            "size",
+            "theta",
+            "radius",
+            "row",
+            "column",
+            "tooltip",
+            "detail"
+          ],
+          "type": "string",
+          "description": "编码通道名称。"
+        },
+        "semantic_role": {
+          "enum": [
+            "dimension",
+            "measure",
+            "temporal",
+            "identifier",
+            "geo"
+          ],
+          "type": "string",
+          "description": "该编码通道期望绑定的字段语义。"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "通道是否为模板必填。"
+        },
+        "allow_multiple": {
+          "type": "boolean",
+          "description": "通道是否允许绑定多个字段。"
+        },
+        "aggregate": {
+          "anyOf": [
+            {
+              "enum": [
+                "sum",
+                "avg",
+                "min",
+                "max",
+                "count",
+                "median"
+              ],
+              "type": "string"
+            },
+            {}
+          ],
+          "description": "默认聚合方式，仅对度量字段生效。"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {}
+          ],
+          "description": "通道的业务说明或使用建议。"
+        }
+      },
+      "required": [
+        "channel",
+        "semantic_role",
+        "required",
+        "allow_multiple"
+      ]
+    }
+  }
+}

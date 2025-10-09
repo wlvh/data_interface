@@ -1,0 +1,99 @@
+"""数据集概览与概要契约模型。"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from apps.backend.contracts.fields import FieldSchema
+
+
+class DatasetSummary(BaseModel):
+    """面向 LLM 和前端的轻量级数据摘要。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str = Field(description="数据集的唯一标识。", min_length=1)
+    dataset_version: str = Field(description="数据集版本号，用于缓存控制。", min_length=1)
+    generated_at: datetime = Field(description="UTC 时间的摘要生成时间戳。")
+    row_count: int = Field(description="摘要统计的记录数。", ge=0)
+    field_count: int = Field(description="摘要中包含的字段数量。", ge=0)
+    fields: List[FieldSchema] = Field(
+        description="字段契约集合，用于驱动图表与规划。",
+        min_items=1,
+    )
+    sample_rows: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="用于上下文示例的样本行，所有值均序列化为字符串。",
+        max_items=20,
+    )
+    warnings: List[str] = Field(
+        default_factory=list,
+        description="扫描过程中产生的告警信息，按时间顺序排列。",
+    )
+
+    @model_validator(mode="after")
+    def validate_fields(cls, data: "DatasetSummary") -> "DatasetSummary":
+        """校验字段数量与示例行的一致性。"""
+
+        if data.field_count != len(data.fields):
+            raise ValueError("field_count 必须与 fields 长度一致。")
+        for sample in data.sample_rows:
+            if len(sample) != data.field_count:
+                raise ValueError("sample_rows 中的每行字段数量必须与 field_count 匹配。")
+        return data
+
+
+class DatasetProfile(BaseModel):
+    """完整的数据集画像契约。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str = Field(description="数据集的唯一标识。", min_length=1)
+    dataset_version: str = Field(description="数据集版本号。", min_length=1)
+    name: str = Field(description="数据集名称。", min_length=1)
+    description: Optional[str] = Field(
+        default=None,
+        description="数据集的业务描述。",
+    )
+    source: Optional[str] = Field(
+        default=None,
+        description="数据来源或上传渠道。",
+    )
+    created_at: datetime = Field(description="数据集创建时间（UTC）。")
+    profiled_at: datetime = Field(description="画像生成时间（UTC）。")
+    row_count: int = Field(description="全量记录数。", ge=0)
+    field_count: int = Field(description="字段数量。", ge=0)
+    total_bytes: Optional[int] = Field(
+        default=None,
+        description="原始数据集大小（字节）。",
+        ge=0,
+    )
+    hash_digest: str = Field(
+        description="用于缓存和重放的哈希摘要。",
+        min_length=8,
+    )
+    summary: DatasetSummary = Field(description="轻量级摘要，用于传递给模型。")
+    profiling_notes: List[str] = Field(
+        default_factory=list,
+        description="画像过程中人工或自动记录的备注。",
+    )
+
+    @model_validator(mode="after")
+    def validate_profile(cls, data: "DatasetProfile") -> "DatasetProfile":
+        """确保概要信息与摘要保持一致。"""
+
+        if data.field_count != data.summary.field_count:
+            raise ValueError("field_count 必须与 summary.field_count 匹配。")
+        if data.row_count < data.summary.row_count:
+            raise ValueError("row_count 不能小于 summary.row_count。")
+        if data.profiled_at < data.created_at:
+            raise ValueError("profiled_at 不能早于 created_at。")
+        if data.summary.dataset_id != data.dataset_id:
+            raise ValueError("summary.dataset_id 必须与 dataset_id 相同。")
+        if data.summary.dataset_version != data.dataset_version:
+            raise ValueError("summary.dataset_version 必须与 dataset_version 相同。")
+        return data
+

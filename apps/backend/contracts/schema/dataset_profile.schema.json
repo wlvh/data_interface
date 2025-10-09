@@ -1,0 +1,368 @@
+{
+  "title": "DatasetProfile",
+  "type": "object",
+  "properties": {
+    "dataset_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "数据集的唯一标识。"
+    },
+    "dataset_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "数据集版本号。"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "数据集名称。"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {}
+      ],
+      "description": "数据集的业务描述。"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {}
+      ],
+      "description": "数据来源或上传渠道。"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "数据集创建时间（UTC）。"
+    },
+    "profiled_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "画像生成时间（UTC）。"
+    },
+    "row_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "全量记录数。"
+    },
+    "field_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "字段数量。"
+    },
+    "total_bytes": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {}
+      ],
+      "description": "原始数据集大小（字节）。"
+    },
+    "hash_digest": {
+      "type": "string",
+      "minLength": 8,
+      "description": "用于缓存和重放的哈希摘要。"
+    },
+    "summary": {
+      "$ref": "#/$defs/DatasetSummary",
+      "description": "轻量级摘要，用于传递给模型。"
+    },
+    "profiling_notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "画像过程中人工或自动记录的备注。"
+    }
+  },
+  "required": [
+    "dataset_id",
+    "dataset_version",
+    "name",
+    "created_at",
+    "profiled_at",
+    "row_count",
+    "field_count",
+    "hash_digest",
+    "summary"
+  ],
+  "$defs": {
+    "ValueRange": {
+      "title": "ValueRange",
+      "type": "object",
+      "properties": {
+        "minimum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {}
+          ],
+          "description": "字段在扫描窗口内的最小值，仅适用于数值字段。"
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {}
+          ],
+          "description": "字段在扫描窗口内的最大值，仅适用于数值字段。"
+        },
+        "categories": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {}
+          ],
+          "description": "按频次降序排列的类别取值列表，仅适用于类别字段。"
+        },
+        "top_k_frequencies": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            {}
+          ],
+          "description": "与 categories 对应的频次列表，用于前端显示 Top-K。"
+        }
+      }
+    },
+    "FieldStatistics": {
+      "title": "FieldStatistics",
+      "type": "object",
+      "properties": {
+        "total_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "扫描窗口内的记录总数，要求为非负整数。"
+        },
+        "missing_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "缺失值数量，必须小于等于 total_count。"
+        },
+        "distinct_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {}
+          ],
+          "description": "唯一值数量，适用于类别或标识字段。"
+        },
+        "missing_ratio": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "缺失率，范围为 [0, 1]。"
+        },
+        "entropy": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0.0
+            },
+            {}
+          ],
+          "description": "离散字段的信息熵，用于辅助排序和推荐。"
+        }
+      },
+      "required": [
+        "total_count",
+        "missing_count",
+        "missing_ratio"
+      ]
+    },
+    "FieldSchema": {
+      "title": "FieldSchema",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "字段的原始名称。"
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "字段在嵌套结构中的访问路径，按层级排列。"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {}
+          ],
+          "description": "面向用户展示的字段标题，可选。"
+        },
+        "data_type": {
+          "enum": [
+            "integer",
+            "number",
+            "boolean",
+            "string",
+            "datetime"
+          ],
+          "type": "string",
+          "description": "字段的基础数据类型。"
+        },
+        "semantic_type": {
+          "enum": [
+            "dimension",
+            "measure",
+            "temporal",
+            "identifier",
+            "geo",
+            "unknown"
+          ],
+          "type": "string",
+          "description": "字段的语义类型，用于图表推荐与校验。"
+        },
+        "nullable": {
+          "type": "boolean",
+          "description": "字段是否允许缺失值。"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {}
+          ],
+          "description": "字段的度量单位，例如 USD、% 等。"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {}
+          ],
+          "description": "字段的业务描述，用于提示与文档。"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "与字段相关的标签集合，可用于检索。"
+        },
+        "sample_values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "description": "可展示给用户的示例取值列表，按字符串形式存储。"
+        },
+        "value_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueRange"
+            },
+            {}
+          ],
+          "description": "字段的值域信息。"
+        },
+        "statistics": {
+          "$ref": "#/$defs/FieldStatistics",
+          "description": "字段的统计信息，用于质量与推荐。"
+        }
+      },
+      "required": [
+        "name",
+        "data_type",
+        "semantic_type",
+        "nullable",
+        "statistics"
+      ]
+    },
+    "DatasetSummary": {
+      "title": "DatasetSummary",
+      "type": "object",
+      "properties": {
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "数据集的唯一标识。"
+        },
+        "dataset_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "数据集版本号，用于缓存控制。"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC 时间的摘要生成时间戳。"
+        },
+        "row_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "摘要统计的记录数。"
+        },
+        "field_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "摘要中包含的字段数量。"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldSchema"
+          },
+          "minItems": 1,
+          "description": "字段契约集合，用于驱动图表与规划。"
+        },
+        "sample_rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "maxItems": 20,
+          "description": "用于上下文示例的样本行，所有值均序列化为字符串。"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "扫描过程中产生的告警信息，按时间顺序排列。"
+        }
+      },
+      "required": [
+        "dataset_id",
+        "dataset_version",
+        "generated_at",
+        "row_count",
+        "field_count",
+        "fields"
+      ]
+    }
+  }
+}

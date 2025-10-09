@@ -50,11 +50,12 @@ yarn-error.log*
 data/
 *.xlsx
 !config/*.json
-!poc/package.json
-!poc/package-lock.json
-!poc/public/Walmart.csv
+!apps/frontend/package.json
+!apps/frontend/package-lock.json
+!apps/frontend/public/Walmart.csv
 
 # Temporary files
 tmp/
 temp/
 *.tmp
+
