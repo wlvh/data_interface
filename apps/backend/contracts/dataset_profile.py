@@ -38,12 +38,12 @@ class DatasetSummary(ContractModel):
     field_count: int = Field(description="摘要中包含的字段数量。", ge=0)
     fields: List[FieldSchema] = Field(
         description="字段契约集合，用于驱动图表与规划。",
-        min_items=1,
+        min_length=1,
     )
     sample_rows: List[Dict[str, str]] = Field(
         default_factory=list,
         description="用于上下文示例的样本行，所有值均序列化为字符串。",
-        max_items=20,
+        max_length=20,
     )
     warnings: List[str] = Field(
         default_factory=list,
@@ -51,16 +51,16 @@ class DatasetSummary(ContractModel):
     )
 
     @model_validator(mode="after")
-    def validate_fields(cls, data: "DatasetSummary") -> "DatasetSummary":
+    def validate_fields(self) -> "DatasetSummary":
         """校验字段数量、示例行一致性以及 UTC 时间。"""
 
-        _ensure_utc(dt=data.generated_at, field_name="generated_at")
-        if data.field_count != len(data.fields):
+        _ensure_utc(dt=self.generated_at, field_name="generated_at")
+        if self.field_count != len(self.fields):
             raise ValueError("field_count 必须与 fields 长度一致。")
-        for sample in data.sample_rows:
-            if len(sample) != data.field_count:
+        for sample in self.sample_rows:
+            if len(sample) != self.field_count:
                 raise ValueError("sample_rows 中的每行字段数量必须与 field_count 匹配。")
-        return data
+        return self
 
 
 class DatasetProfile(ContractModel):
@@ -105,20 +105,20 @@ class DatasetProfile(ContractModel):
     )
 
     @model_validator(mode="after")
-    def validate_profile(cls, data: "DatasetProfile") -> "DatasetProfile":
+    def validate_profile(self) -> "DatasetProfile":
         """确保概要信息与摘要保持一致，并强制 UTC。"""
 
-        _ensure_utc(dt=data.created_at, field_name="created_at")
-        _ensure_utc(dt=data.profiled_at, field_name="profiled_at")
-        if data.field_count != data.summary.field_count:
+        _ensure_utc(dt=self.created_at, field_name="created_at")
+        _ensure_utc(dt=self.profiled_at, field_name="profiled_at")
+        if self.field_count != self.summary.field_count:
             raise ValueError("field_count 必须与 summary.field_count 匹配。")
-        if data.row_count < data.summary.row_count:
+        if self.row_count < self.summary.row_count:
             raise ValueError("row_count 不能小于 summary.row_count。")
-        if data.profiled_at < data.created_at:
+        if self.profiled_at < self.created_at:
             raise ValueError("profiled_at 不能早于 created_at。")
-        if data.summary.dataset_id != data.dataset_id:
+        if self.summary.dataset_id != self.dataset_id:
             raise ValueError("summary.dataset_id 必须与 dataset_id 相同。")
-        if data.summary.dataset_version != data.dataset_version:
+        if self.summary.dataset_version != self.dataset_version:
             raise ValueError("summary.dataset_version 必须与 dataset_version 相同。")
-        return data
+        return self
 
