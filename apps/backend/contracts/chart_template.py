@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+import json
 from typing import Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
+
+from apps.backend.contracts.metadata import ContractModel
 
 
-class ChartEncoding(BaseModel):
+class ChartEncoding(ContractModel):
     """可视化编码通道的契约描述。"""
 
     model_config = ConfigDict(extra="forbid")
+
+    @classmethod
+    def schema_name(cls) -> str:
+        """返回编码契约的 Schema 名称。"""
+
+        return "chart_encoding"
 
     channel: Literal[
         "x",
@@ -54,10 +63,16 @@ class ChartEncoding(BaseModel):
         return data
 
 
-class ChartTemplate(BaseModel):
+class ChartTemplate(ContractModel):
     """图表模板契约。"""
 
     model_config = ConfigDict(extra="forbid")
+
+    @classmethod
+    def schema_name(cls) -> str:
+        """返回图表模板契约的 Schema 名称。"""
+
+        return "chart_template"
 
     template_id: str = Field(description="模板唯一标识。", min_length=1)
     version: str = Field(description="模板版本号。", min_length=1)
@@ -96,5 +111,23 @@ class ChartTemplate(BaseModel):
         required_channels = [item.channel for item in data.encodings if item.required]
         if len(set(required_channels)) != len(required_channels):
             raise ValueError("模板中的必填编码通道不能重复。")
+
+        channel_counts: Dict[str, int] = {}
+        for encoding in data.encodings:
+            if encoding.channel in channel_counts:
+                channel_counts[encoding.channel] = channel_counts[encoding.channel] + 1
+            else:
+                channel_counts[encoding.channel] = 1
+
+        for channel, count in channel_counts.items():
+            if channel in {"tooltip", "detail"}:
+                continue
+            if count > 1:
+                raise ValueError("除 tooltip/detail 外的编码通道必须全局唯一。")
+
+        try:
+            json.dumps(data.default_config)
+        except TypeError as exc:
+            raise ValueError("default_config 必须可 JSON 序列化。") from exc
         return data
 

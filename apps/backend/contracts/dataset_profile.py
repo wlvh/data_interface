@@ -2,18 +2,34 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from apps.backend.contracts.fields import FieldSchema
+from apps.backend.contracts.metadata import ContractModel
 
 
-class DatasetSummary(BaseModel):
+def _ensure_utc(dt: datetime, field_name: str) -> None:
+    """校验给定的时间戳为 UTC 时区。"""
+
+    if dt.tzinfo is None:
+        raise ValueError(f"{field_name} 必须包含时区信息，并使用 UTC。")
+    if dt.tzinfo.utcoffset(dt) != timezone.utc.utcoffset(dt):
+        raise ValueError(f"{field_name} 必须为 UTC 时间。")
+
+
+class DatasetSummary(ContractModel):
     """面向 LLM 和前端的轻量级数据摘要。"""
 
     model_config = ConfigDict(extra="forbid")
+
+    @classmethod
+    def schema_name(cls) -> str:
+        """返回用于标识摘要契约的 Schema 名称。"""
+
+        return "dataset_summary"
 
     dataset_id: str = Field(description="数据集的唯一标识。", min_length=1)
     dataset_version: str = Field(description="数据集版本号，用于缓存控制。", min_length=1)
@@ -36,8 +52,9 @@ class DatasetSummary(BaseModel):
 
     @model_validator(mode="after")
     def validate_fields(cls, data: "DatasetSummary") -> "DatasetSummary":
-        """校验字段数量与示例行的一致性。"""
+        """校验字段数量、示例行一致性以及 UTC 时间。"""
 
+        _ensure_utc(dt=data.generated_at, field_name="generated_at")
         if data.field_count != len(data.fields):
             raise ValueError("field_count 必须与 fields 长度一致。")
         for sample in data.sample_rows:
@@ -46,10 +63,16 @@ class DatasetSummary(BaseModel):
         return data
 
 
-class DatasetProfile(BaseModel):
+class DatasetProfile(ContractModel):
     """完整的数据集画像契约。"""
 
     model_config = ConfigDict(extra="forbid")
+
+    @classmethod
+    def schema_name(cls) -> str:
+        """返回用于标识画像契约的 Schema 名称。"""
+
+        return "dataset_profile"
 
     dataset_id: str = Field(description="数据集的唯一标识。", min_length=1)
     dataset_version: str = Field(description="数据集版本号。", min_length=1)
@@ -83,8 +106,10 @@ class DatasetProfile(BaseModel):
 
     @model_validator(mode="after")
     def validate_profile(cls, data: "DatasetProfile") -> "DatasetProfile":
-        """确保概要信息与摘要保持一致。"""
+        """确保概要信息与摘要保持一致，并强制 UTC。"""
 
+        _ensure_utc(dt=data.created_at, field_name="created_at")
+        _ensure_utc(dt=data.profiled_at, field_name="profiled_at")
         if data.field_count != data.summary.field_count:
             raise ValueError("field_count 必须与 summary.field_count 匹配。")
         if data.row_count < data.summary.row_count:

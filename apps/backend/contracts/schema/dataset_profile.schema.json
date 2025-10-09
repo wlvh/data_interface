@@ -140,7 +140,8 @@
           ],
           "description": "与 categories 对应的频次列表，用于前端显示 Top-K。"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "FieldStatistics": {
       "title": "FieldStatistics",
@@ -187,7 +188,8 @@
         "total_count",
         "missing_count",
         "missing_ratio"
-      ]
+      ],
+      "additionalProperties": false
     },
     "FieldSchema": {
       "title": "FieldSchema",
@@ -294,7 +296,8 @@
         "semantic_type",
         "nullable",
         "statistics"
-      ]
+      ],
+      "additionalProperties": false
     },
     "DatasetSummary": {
       "title": "DatasetSummary",
@@ -362,7 +365,12 @@
         "row_count",
         "field_count",
         "fields"
-      ]
+      ],
+      "additionalProperties": false
     }
-  }
+  },
+  "$id": "https://schemas.data-interface.local/contracts/dataset_profile.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "additionalProperties": false
 }

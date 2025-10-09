@@ -12,10 +12,12 @@ from __future__ import annotations
 
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
+
+from apps.backend.contracts.metadata import ContractModel
 
 
-class ValueRange(BaseModel):
+class ValueRange(ContractModel):
     """字段的值域信息。
 
     该模型既服务于数值字段，也服务于分类型字段，用以约束可视化和
@@ -25,6 +27,12 @@ class ValueRange(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    @classmethod
+    def schema_name(cls) -> str:
+        """返回值域契约的 Schema 名称。"""
+
+        return "value_range"
 
     minimum: Optional[float] = Field(
         default=None,
@@ -69,7 +77,7 @@ class ValueRange(BaseModel):
         return data
 
 
-class FieldStatistics(BaseModel):
+class FieldStatistics(ContractModel):
     """字段的基础统计指标。
 
     该模型聚焦于用于可视化和质量监控的核心指标，不参与任何隐式推断。
@@ -78,6 +86,12 @@ class FieldStatistics(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    @classmethod
+    def schema_name(cls) -> str:
+        """返回字段统计契约的 Schema 名称。"""
+
+        return "field_statistics"
 
     total_count: int = Field(
         description="扫描窗口内的记录总数，要求为非负整数。",
@@ -109,8 +123,13 @@ class FieldStatistics(BaseModel):
 
         if data.missing_count > data.total_count:
             raise ValueError("缺失数量不能超过总数。")
-        if data.missing_ratio > 0.0:
-            ratio = data.missing_count / data.total_count if data.total_count > 0 else 0.0
+        if data.total_count == 0:
+            if data.missing_count != 0:
+                raise ValueError("total_count 为 0 时不应出现缺失值计数。")
+            if data.missing_ratio != 0.0:
+                raise ValueError("total_count 为 0 时缺失率必须为 0。")
+        else:
+            ratio = data.missing_count / data.total_count
             if abs(ratio - data.missing_ratio) > 1e-6:
                 raise ValueError("缺失率与缺失数量不一致。")
         if data.distinct_count is not None and data.distinct_count > data.total_count:
@@ -118,7 +137,7 @@ class FieldStatistics(BaseModel):
         return data
 
 
-class FieldSchema(BaseModel):
+class FieldSchema(ContractModel):
     """字段契约描述。
 
     每个字段契约都需要明确数据类型、语义角色以及可视化所需的补充信息。
@@ -126,6 +145,12 @@ class FieldSchema(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    @classmethod
+    def schema_name(cls) -> str:
+        """返回字段契约的 Schema 名称。"""
+
+        return "field_schema"
 
     name: str = Field(description="字段的原始名称。", min_length=1)
     path: List[str] = Field(

@@ -149,7 +149,12 @@
         "semantic_role",
         "required",
         "allow_multiple"
-      ]
+      ],
+      "additionalProperties": false
     }
-  }
+  },
+  "$id": "https://schemas.data-interface.local/contracts/chart_template.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "additionalProperties": false
 }

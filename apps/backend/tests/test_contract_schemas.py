@@ -21,10 +21,26 @@ def _load_schema(name: str) -> dict:
     return json.loads(schema_path.read_text(encoding="utf-8"))
 
 
+def _strip_documentation(payload: object) -> object:
+    """剥离 Schema 中的描述性字段，聚焦结构一致性。"""
+
+    if isinstance(payload, dict):
+        filtered = {}
+        for key, value in payload.items():
+            if key in {"title", "description", "examples"}:
+                continue
+            filtered[key] = _strip_documentation(value)
+        return filtered
+    if isinstance(payload, list):
+        return [_strip_documentation(item) for item in payload]
+    return payload
+
+
 def _normalize_schema(schema: dict) -> dict:
     """对 schema 进行排序，避免键顺序导致的断言失败。"""
 
-    return json.loads(json.dumps(schema, sort_keys=True))
+    stripped = _strip_documentation(schema)
+    return json.loads(json.dumps(stripped, sort_keys=True))
 
 
 def test_field_schema_matches_json() -> None:
@@ -124,6 +140,118 @@ def test_dataset_profile_consistency_checks() -> None:
             field_count=2,
             hash_digest="abcdef12",
             summary=summary,
+        )
+
+
+def test_dataset_summary_rejects_naive_datetime() -> None:
+    """生成时间缺失 UTC 时区时应触发异常。"""
+
+    statistics = FieldStatistics(
+        total_count=10,
+        missing_count=0,
+        distinct_count=5,
+        missing_ratio=0.0,
+    )
+    field_schema = FieldSchema(
+        name="created_at",
+        path=[],
+        data_type="datetime",
+        semantic_type="temporal",
+        nullable=False,
+        statistics=statistics,
+    )
+    with pytest.raises(ValidationError):
+        DatasetSummary(
+            dataset_id="ds", 
+            dataset_version="v1",
+            generated_at=datetime(2024, 1, 1),
+            row_count=1,
+            field_count=1,
+            fields=[field_schema],
+        )
+
+
+def test_field_statistics_ratio_validation() -> None:
+    """缺失率与缺失数量不匹配时应抛出错误。"""
+
+    with pytest.raises(ValidationError):
+        FieldStatistics(
+            total_count=10,
+            missing_count=1,
+            missing_ratio=0.5,
+        )
+
+
+def test_dataset_profile_requires_utc() -> None:
+    """画像时间若缺失 UTC 时区则拒绝。"""
+
+    field_schema = _build_field_schema()
+    summary = DatasetSummary(
+        dataset_id="ds_1",
+        dataset_version="v1",
+        generated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        row_count=50,
+        field_count=1,
+        fields=[field_schema],
+    )
+    with pytest.raises(ValidationError):
+        DatasetProfile(
+            dataset_id="ds_1",
+            dataset_version="v1",
+            name="测试数据集",
+            created_at=datetime(2024, 1, 1),
+            profiled_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
+            row_count=100,
+            field_count=1,
+            hash_digest="abcdef12",
+            summary=summary,
+        )
+
+
+def test_chart_template_duplicate_channel_forbidden() -> None:
+    """除 tooltip/detail 外的通道不允许重复。"""
+
+    encoding_x = ChartEncoding(
+        channel="x",
+        semantic_role="dimension",
+        required=True,
+        allow_multiple=False,
+    )
+    encoding_y = ChartEncoding(
+        channel="x",
+        semantic_role="measure",
+        required=False,
+        allow_multiple=False,
+    )
+    with pytest.raises(ValidationError):
+        ChartTemplate(
+            template_id="tpl_duplicate",
+            version="1.0.0",
+            name="重复通道",
+            mark="bar",
+            encodings=[encoding_x, encoding_y],
+            supported_engines=["vega-lite"],
+        )
+
+
+def test_chart_template_default_config_serializable() -> None:
+    """默认配置不可序列化时需要立即失败。"""
+
+    encoding = ChartEncoding(
+        channel="x",
+        semantic_role="dimension",
+        required=True,
+        allow_multiple=False,
+    )
+    with pytest.raises(ValidationError):
+        ChartTemplate(
+            template_id="tpl_bad_config",
+            version="1.0.0",
+            name="非法配置",
+            mark="bar",
+            encodings=[encoding],
+            default_config={"bad": {1, 2}},
+            supported_engines=["vega-lite"],
         )
 
 
