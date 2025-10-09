@@ -9,7 +9,6 @@
 # 1. Principle of Proactive Action:
 0. 严禁在脚本或者代码里写入rm等删除语法逃避老板审查。rm等语法必须要老板审核。
 1. 你能使用gh命令，所以你的标准开发流程已经是切换到新分支（确保无重复），以pr的方式提交你的成果。
-2. source ./.venv/bin/activate 来激活虚拟环境
 
 # 2. Principle of Coding:
 0. What I cannot create, I do not understand.
@@ -26,58 +25,4 @@
 11. "Tokens are not an issue" means you should prioritize thoroughness, planning, and self-correction over computational cost to minimize total project time and human intervention.
 
 
-# 项目速览
-- **目标**：针对系统化交易策略执行前向滚动的模型置信度集合（MCS）评估，产出可部署策略列表及诊断指标。
-- **核心目录**：
-  - `mcs_pipeline/`：配置、数据加载、Bootstrap、MCS 核心逻辑与 Runner。
-  - `run_forward_mcs.py`：单次前向评估入口；可通过参数定制窗口、损失、Bootstrap 超参。
-  - `run_forward_mcs_all_strategies.py`：封装完整流程（前向评估 + 诊断脚本）。
-  - `summarize_mcs_outputs.py`、`analyze_membership_patterns.py`、`merge_mcs_outputs.py`：结果汇总、成员分析与多目录合并。
-  - `_io_utils.py`：统一的 CSV/Parquet 读取工具，诊断脚本依赖此模块。
-  - `mcs_outputs_temp/`：示例输出（分策略）用于验证格式。
-  - `MCS_0918_REPORT.md`：历史分析记录，提供背景与设计动机。
-- **关键数据**：默认假设存在滚动优化聚合 JSON (`2021_10_08_2023_05_28_opt` 类似命名) 以及 `config.json`（策略/目标/窗口列表）。
-  - 初次接入务必通读 `extract_strategies.py` 顶部的文档字符串，其中详细描述了 `2021_10_08_2023_05_28_opt.json` 的嵌套层级、关键字段与遍历顺序，是理解数据结构的首选资料。
-
-# 环境准备与依赖
-- 使用 `uv` 统一管理解释器与依赖：
-  ```bash
-  uv python install 3.11  # 如需特定版本
-  uv sync                 # 依据 pyproject.toml 安装依赖并创建 .venv/
-  ```
-- 默认虚拟环境位于仓库根目录的 `.venv/`。执行脚本前需遵循公司要求手动激活：`source ./.venv/bin/activate`。
-- 运行任务时可使用 `uv run python <script>` 以确保依赖一致。
-- 额外工具（如 `fastparquet`、`matplotlib`）需通过 `uv add` 引入，并同步更新 `pyproject.toml`/`uv.lock`。
-
-# 开发流程要求
-- 创建分支：`git checkout -b feat/<description>`，确保分支命名唯一，完成后发起 PR。
-- 代码提交需对齐约定式提交格式，单个 MR 内保持历史清晰；WIP 提交记得 squash。
-- PR 中必须包含：
-  1. 行为变更说明；
-  2. 验证命令（如 `uv run python run_unit_checks.py` 或特定脚本）；
-  3. 新增产物或配置项列表。
-- 本地变更完成后执行 `uv run python run_unit_checks.py`（及必要的自定义测试脚本）确保逻辑正确。
-
-# 代码协作指南
-- 模块职责：
-  - `mcs_pipeline.config` 维护所有配置数据类与默认参数，新增参数需集中管理。
-  - `mcs_pipeline.data_loader` 负责将外部 JSON 转换为周度面板；若数据列变化，需先在此模块补齐。
-  - `mcs_pipeline.bootstrap`、`mcs_pipeline.mcs` 封装统计算法，修改需附带单元测试或详细演算说明。
-  - `mcs_pipeline.runner` 调度策略级别循环与多线程执行，改动时注意线程安全与缓存策略。
-- 所有函数/类需提供 Docstring，并在函数内部以注释说明功能块目的与设计动机。
-- 对输入参数采用显式关键字传参，禁止滥用 `dict.get`。未提供的参数要及时报错（Fail Fast）。
-- 禁止在代码内隐藏式删除文件（例如 `rm`），涉及清理请在终端明确执行并记录。
-- 命令行脚本需在 `__main__` 块内解析参数，并保持 CLI 帮助文档同步更新。
-
-# 验证与交付清单
-- **必跑检查**：`uv run python run_unit_checks.py`。
-- **可选检查**：
-  - 针对核心流程的手动冒烟：`uv run python run_forward_mcs.py --config-json ... --data-json ...`。
-  - 若改动诊断脚本，至少使用 `mcs_outputs_temp/` 进行读写验证。
-- **文档更新**：涉及用户操作或依赖的改动必须同步 `README.md`（中文）与 `README.en.md`（英文），确保语言切换链接有效。
-- **配置与样例**：新增配置文件、示例数据或输出目录需在 README 的“产出说明/数据准备”章节说明路径与用途。
-
-# 与上游协同
-- 若需求涉及新增损失指标或策略，请与数据团队确认 JSON 导出的字段命名，并在 `config.json` 及 `data_loader` 中同步。
-- 遇到大体积产出文件（>50MB）需提前规划存储方案（Git LFS 或外部对象存储），避免阻塞推送。
 - 任何无法在当前迭代解决的问题，写入 README 的 TODO 列表或开 Issue 记录。
