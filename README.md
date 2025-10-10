@@ -27,10 +27,9 @@ Data Interface 是一个面向多行业、多数据域的智能分析操作系�
 | `apps/backend/stores/` | 内存缓存 | `DatasetStore`、`TraceStore` 用于画像与 Trace 回放。 |
 | `apps/backend/contracts/` | 数据契约与领域模型 | `dataset_profile.py`、`plan.py`、`trace.py` 等及镜像 `schema/*.json`。 |
 | `apps/backend/tests/` | 契约与流程校验 | Schema 同步测试、状态图单元测试。 |
-| `apps/frontend/` | 主产品前端（待 TS 化） | Vite App、Redux 迁移中，承载编码货架、图表模板、AI 交互界面 |
-| `poc/` | 历史孤立实验 | 早期可视化原型（需逐步迁出或沉淀为文档示例） |
-| `docs/` | 架构规划 | 多 Agent 状态图与目录规划。 |
+| `apps/frontend/` | 主产品前端（待 TS 化） | Vite App、Redux 迁移中，承载编码货架、图表模板、AI 交互界面。 |
 | `var/` | 运行时落盘 | `traces/` 存储 Trace JSON 以支持回放。 |
+| `tmp_traces/` | 开发期调试输出 | 拆分调试阶段的 Trace 栈，便于对比离线与线上结果。 |
 | `AGENTS.md` | Agent 策略草案 | 描述现有/计划中的多 Agent 协作框架 |
 | `Walmart.csv` | 演示数据 | 示例数据集，未来应替换为可配置数据源 |
 
@@ -44,15 +43,15 @@ Data Interface 是一个面向多行业、多数据域的智能分析操作系�
 4. **Transform Execute / Aggregate Bin**：执行数据派生，产出样本、指标、日志与 SLO。
 5. **Chart Recommend / Natural Edit**：模板 + 映射生成 `ChartSpec`，自然语言继续迭代。
 6. **Explain Agent**：以“数据摘要 + 代码 + 结果”为输入，输出短 Markdown。
-7. **Task Stream & Trace Replay**：SSE 回传链路进度，Trace 树记录全链路，用于审计和回放。
-8. **Clean**：在图/表变更后回收未引用资源，保持 Store 与持久层一致。
+7. **Task Stream & Trace Replay**：`TaskRunner` 挂载 SSE，推送节点完成事件，并将 Trace 树持久化到 `TraceStore` 以支持回放。
 
 ## 工程现状
 
-- **前端技术债**：`apps/frontend/src` 仍以 JS 为主，需迁移至 TS + Redux Toolkit，并建立统一的 `ChartSpec` 适配层。
-- **后端骨架**：已落地 FastAPI `/api/data/scan`、`/api/plan/refine`、`/api/trace/*`、`/api/task/submit`、`/api/task/stream`，并完成 Scan → Plan → Transform → Chart → Explain 编排；其余 Transform API、OpenTelemetry、SLO Dashboard 仍待实现。
+- **前端技术债**：`apps/frontend/src` 仍以 JS 为主，需迁移至 TS + Redux Toolkit，并建立统一的 `ChartSpec` 适配层与事件总线。
+- **后端骨架**：已落地 FastAPI `/api/data/scan`、`/api/plan/refine`、`/api/trace/*`、`/api/task/*`，并完成 Scan → Plan → Transform → Chart → Explain 编排；`/api/transform/*` 等细分接口、OpenTelemetry 与 SLO Dashboard 尚缺。
+- **任务编排**：`TaskRunner` 将 `execute_pipeline` 以线程池方式异步执行，并通过 SSE 推送节点级事件；缺少失败重试、超时治理和节点级日志清理，需要在后续迭代补齐。
 - **知识库建设**：新增内存级 `DatasetStore` 与字段 Top-K 摘要，下阶段需引入持久化、分箱策略与缓存淘汰。
-- **状态同步**：`replaceChart` 等事件总线尚未统一，需在 Redux 层收口。
+- **状态同步**：`replaceChart` 等事件总线尚未统一，需在 Redux 层收口并打通前后端 Trace 标识。
 
 ## 快速开始
 
@@ -97,23 +96,3 @@ pytest
 - 每个 Agent、任务节点需定义 SLO：耗时、重试次数、失败分类。
 - Trace 采用 Span 树结构，记录模型/提示版本、输入摘要、输出摘要及错误栈。
 - 所有 I/O 结果必须可 JSON 序列化落盘，便于审计、A/B 与缓存复用。
-
-## TODO
-
-- [x] 建立 `/api/data/scan`、`/api/plan/refine`、`/api/trace` 读取/回放与 `/api/task/*` 流水线，串联多 Agent 状态图并补充契约测试。
-- [ ] 完成剩余最小 API（`/api/transform/execute`, `/api/transform/aggregate_bin`, `/api/chart/recommend`, `/api/natural/edit`, `/api/task/stream` SSE 增强、`/api/task/submit` 扩展参数）与端到端验收脚本。
-- [ ] 接入 OpenTelemetry，输出节点级耗时/失败指标并绘制 SLO Dashboard。
-- [ ] 引入 Redux Toolkit、RTK Query、SSE 客户端与 `ChartSpec` 适配层，完成前端 Store 重构与回放。
-- [ ] 构建字段知识库与 Top-K/分箱策略，在数据扫描阶段预计算并缓存。
-- [ ] 打通 Trace → Span 全链路指标，接入 OpenTelemetry 或自研采集，定义 SLO Dashboard。
-- [ ] 引入 Redux Toolkit、RTK Query、SSE 客户端与 `ChartSpec` 适配层，完成前端 Store 重构与回放。
-- [ ] 构建字段知识库与 Top-K/分箱策略，在数据扫描阶段预计算并缓存。
-- [ ] 打通 Trace → Span 全链路指标，接入 OpenTelemetry 或自研采集，定义 SLO Dashboard。
-- [ ] 规划“给我惊喜”推荐流：数据触发器、随机问题生成、推荐接受率追踪。
-- [ ] 完成前端 TS 化与 `replaceChart` 单一入口落地，统一图表事件建模。
-- [ ] 配置 `.pre-commit-config.yaml` 与 CI，覆盖契约镜像、体积限制、安全门（UTC、采样上限、Worker 并发协议等）。
-- [ ] 梳理 `poc/` 中的沉淀价值，迁移可复用模块或补充文档示例，清退冗余资源。
-
-## License
-
-MIT

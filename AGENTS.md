@@ -26,3 +26,9 @@
 
 
 - 任何无法在当前迭代解决的问题，写入 README 的 TODO 列表或开 Issue 记录。
+
+## 虚拟环境与 uv 调用约定
+- 后端 Python 环境统一由 uv 创建与托管, 当前工程的 `.venv/pyvenv.cfg` 已锁定至 `uv 0.8.4` 与 CPython 3.13.5, 请勿私自改换解释器路径。
+- 日常调用优先使用 `uv run <命令>`, 例如 `uv run pytest` 或 `uv run python apps/backend/main.py`, uv 会自动加载 `.venv` 并注入依赖。
+- 如需交互式调试可执行 `source .venv/bin/activate`, 退出时务必 `deactivate`, 避免污染 shell 会话。
+- 重建环境时运行 `uv venv --python 3.13` 并使用 `uv pip install -r requirements.txt`, 不再额外调用 `python -m venv` 或裸 `pip`.
