@@ -16,6 +16,18 @@ from apps.backend.compat import ConfigDict, Field, model_validator
 
 from apps.backend.contracts.metadata import ContractModel
 
+TemporalGranularity = Literal[
+    "second",
+    "minute",
+    "hour",
+    "day",
+    "week",
+    "month",
+    "quarter",
+    "year",
+]
+"""时间字段允许的粒度候选枚举。"""
+
 
 class ValueRange(ContractModel):
     """字段的值域信息。
@@ -201,6 +213,10 @@ class FieldSchema(ContractModel):
     statistics: FieldStatistics = Field(
         description="字段的统计信息，用于质量与推荐。",
     )
+    temporal_granularity_candidates: List[TemporalGranularity] = Field(
+        default_factory=list,
+        description="若字段语义为时间，则给出支持的时间粒度候选集合。",
+    )
 
     @model_validator(mode="after")
     def validate_samples(self) -> "FieldSchema":
@@ -214,4 +230,8 @@ class FieldSchema(ContractModel):
             raise ValueError("时间语义字段必须声明为 datetime 类型。")
         if self.statistics.missing_count > 0 and not self.nullable:
             raise ValueError("存在缺失值的字段必须标记为可为空。")
+        if self.temporal_granularity_candidates and self.semantic_type != "temporal":
+            raise ValueError("非时间字段不应提供时间粒度候选。")
+        if self.semantic_type == "temporal" and not self.temporal_granularity_candidates:
+            raise ValueError("时间字段需要至少一个时间粒度候选。")
         return self

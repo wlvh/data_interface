@@ -1,9 +1,66 @@
 {
   "$defs": {
+    "SpanEvent": {
+      "additionalProperties": false,
+      "description": "Span 生命周期内的离散事件记录。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "event_type": {
+          "description": "事件类型。",
+          "enum": [
+            "start",
+            "cache_hit",
+            "retry",
+            "abort",
+            "fallback",
+            "emit_partial",
+            "success"
+          ],
+          "title": "Event Type",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "事件发生时间（UTC）。",
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "事件附带的信息。",
+          "title": "Detail"
+        }
+      },
+      "required": [
+        "event_type",
+        "timestamp"
+      ],
+      "title": "SpanEvent",
+      "type": "object"
+    },
     "SpanMetrics": {
       "additionalProperties": false,
       "description": "节点执行的指标快照。",
       "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
         "duration_ms": {
           "description": "节点执行耗时（毫秒）。",
           "minimum": 0,
@@ -16,31 +73,38 @@
           "title": "Retry Count",
           "type": "integer"
         },
-        "failure_category": {
+        "rows_in": {
           "anyOf": [
             {
-              "type": "string"
+              "minimum": 0,
+              "type": "integer"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "失败原因分类，成功时为空。",
-          "title": "Failure Category"
+          "description": "输入行数，缺失表示未记录。",
+          "title": "Rows In"
         },
-        "failure_isolation_ratio": {
-          "description": "失败隔离比例，范围 [0, 1]。",
-          "maximum": 1.0,
-          "minimum": 0.0,
-          "title": "Failure Isolation Ratio",
-          "type": "number"
+        "rows_out": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "输出行数，缺失表示未记录。",
+          "title": "Rows Out"
         }
       },
       "required": [
         "duration_ms",
-        "retry_count",
-        "failure_isolation_ratio"
+        "retry_count"
       ],
       "title": "SpanMetrics",
       "type": "object"
@@ -49,6 +113,12 @@
       "additionalProperties": false,
       "description": "定义单个节点的服务目标。",
       "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
         "max_duration_ms": {
           "description": "节点允许的最大耗时（毫秒）。",
           "minimum": 0,
@@ -79,6 +149,12 @@
       "additionalProperties": false,
       "description": "Trace 树中的单个 Span。",
       "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
         "span_id": {
           "description": "Span 唯一标识。",
           "minLength": 1,
@@ -98,10 +174,10 @@
           "description": "父 Span 标识，根节点为空。",
           "title": "Parent Span Id"
         },
-        "node_name": {
-          "description": "状态图节点名称。",
+        "operation": {
+          "description": "状态图节点名称，建议遵循动词.名词格式，例如 data.scan。",
           "minLength": 1,
-          "title": "Node Name",
+          "title": "Operation",
           "type": "string"
         },
         "agent_name": {
@@ -114,7 +190,8 @@
           "description": "节点执行状态。",
           "enum": [
             "success",
-            "failed"
+            "failed",
+            "aborted"
           ],
           "title": "Status",
           "type": "string"
@@ -125,19 +202,13 @@
           "title": "Started At",
           "type": "string"
         },
-        "completed_at": {
-          "description": "Span 完成时间（UTC）。",
-          "format": "date-time",
-          "title": "Completed At",
-          "type": "string"
+        "slo": {
+          "$ref": "#/$defs/SpanSLO",
+          "description": "节点目标值。"
         },
         "metrics": {
           "$ref": "#/$defs/SpanMetrics",
           "description": "节点执行指标。"
-        },
-        "slo": {
-          "$ref": "#/$defs/SpanSLO",
-          "description": "节点目标值。"
         },
         "model_name": {
           "anyOf": [
@@ -164,17 +235,103 @@
           "default": null,
           "description": "提示词版本标识，非模型节点为空。",
           "title": "Prompt Version"
+        },
+        "dataset_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "输入数据集的哈希摘要，用于回放一致性校验。",
+          "title": "Dataset Hash"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "运行时契约 Schema 版本，便于迁移。",
+          "title": "Schema Version"
+        },
+        "abort_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "若状态为 aborted，则记录终止原因。",
+          "title": "Abort Reason"
+        },
+        "error_class": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "失败时的错误分类。",
+          "title": "Error Class"
+        },
+        "fallback_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "触发后备策略时记录所走的分支。",
+          "title": "Fallback Path"
+        },
+        "sse_seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "若通过 SSE 推送，该 Span 对应的序号。",
+          "title": "Sse Seq"
+        },
+        "events": {
+          "description": "Span 生命周期内发生的事件集合。",
+          "items": {
+            "$ref": "#/$defs/SpanEvent"
+          },
+          "title": "Events",
+          "type": "array"
         }
       },
       "required": [
         "span_id",
-        "node_name",
+        "operation",
         "agent_name",
         "status",
         "started_at",
-        "completed_at",
-        "metrics",
-        "slo"
+        "slo",
+        "metrics"
       ],
       "title": "TraceSpan",
       "type": "object"
@@ -183,6 +340,18 @@
   "additionalProperties": false,
   "description": "任务级 Trace 记录。",
   "properties": {
+    "x-spec-version": {
+      "default": "2.0.0",
+      "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+      "title": "X-Spec-Version",
+      "type": "string"
+    },
+    "trace_id": {
+      "description": "Trace 唯一标识。",
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
     "task_id": {
       "description": "任务标识。",
       "minLength": 1,
@@ -212,6 +381,7 @@
     }
   },
   "required": [
+    "trace_id",
     "task_id",
     "dataset_id",
     "created_at",
@@ -221,5 +391,5 @@
   "type": "object",
   "$id": "https://schemas.data-interface.local/contracts/trace_record.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0"
+  "version": "2.0.0"
 }

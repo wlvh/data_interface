@@ -165,7 +165,7 @@ class TaskRunner:
             "task_id": task_id,
             "plan_id": str(outcome.plan.plan_id),
             "chart_id": outcome.chart.chart_id,
-            "row_count": outcome.table.row_count,
+            "rows_out": outcome.output_table.metrics.rows_out,
         }
         self._broadcast_event(task_id, event, finished=True)
 

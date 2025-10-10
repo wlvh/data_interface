@@ -13,6 +13,7 @@ from apps.backend.agents import (
     ChartRecommendationAgent,
 )
 from apps.backend.infra.clock import UtcClock
+from apps.backend.infra.persistence import ApiRecorder
 from apps.backend.services.pipeline import PipelineAgents
 from apps.backend.services.task_runner import TaskRunner
 from apps.backend.stores import DatasetStore, TraceStore
@@ -38,6 +39,14 @@ def get_trace_store() -> TraceStore:
 
     base_path = Path("var/traces")
     return TraceStore(base_path=base_path)
+
+
+@lru_cache
+def get_api_recorder() -> ApiRecorder:
+    """提供 API 请求/响应落盘器。"""
+
+    base_path = Path("var/api_logs")
+    return ApiRecorder(base_path=base_path)
 
 
 @lru_cache

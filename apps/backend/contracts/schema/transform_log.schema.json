@@ -1,25 +1,30 @@
 {
-  "title": "TransformLog",
+  "additionalProperties": false,
   "description": "变换执行过程中的日志记录。",
-  "type": "object",
   "properties": {
+    "x-spec-version": {
+      "default": "2.0.0",
+      "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+      "title": "X-Spec-Version",
+      "type": "string"
+    },
     "level": {
-      "title": "Level",
       "description": "日志级别。",
       "minLength": 1,
+      "title": "Level",
       "type": "string"
     },
     "message": {
-      "title": "Message",
       "description": "日志内容。",
       "minLength": 1,
+      "title": "Message",
       "type": "string"
     },
     "timestamp": {
-      "title": "Timestamp",
       "description": "UTC 时间的日志时间戳。",
-      "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
     }
   },
   "required": [
@@ -27,8 +32,9 @@
     "message",
     "timestamp"
   ],
-  "additionalProperties": false,
+  "title": "TransformLog",
+  "type": "object",
   "$id": "https://schemas.data-interface.local/contracts/transform_log.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0"
+  "version": "2.0.0"
 }

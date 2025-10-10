@@ -1,9 +1,51 @@
 {
   "$defs": {
+    "DatasetSampling": {
+      "additionalProperties": false,
+      "description": "描述摘要生成时采用的采样策略。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "strategy": {
+          "description": "采样策略名称，例如 head、random、stratified。",
+          "minLength": 1,
+          "title": "Strategy",
+          "type": "string"
+        },
+        "size": {
+          "description": "采样的目标行数。",
+          "minimum": 1,
+          "title": "Size",
+          "type": "integer"
+        },
+        "seed": {
+          "description": "采样所用的随机种子，固定后即可回放。",
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "strategy",
+        "size",
+        "seed"
+      ],
+      "title": "DatasetSampling",
+      "type": "object"
+    },
     "DatasetSummary": {
       "additionalProperties": false,
       "description": "面向 LLM 和前端的轻量级数据摘要。",
       "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
         "dataset_id": {
           "description": "数据集的唯一标识。",
           "minLength": 1,
@@ -28,11 +70,9 @@
           "title": "Row Count",
           "type": "integer"
         },
-        "field_count": {
-          "description": "摘要中包含的字段数量。",
-          "minimum": 0,
-          "title": "Field Count",
-          "type": "integer"
+        "sampling": {
+          "$ref": "#/$defs/DatasetSampling",
+          "description": "生成摘要时采用的采样策略。"
         },
         "fields": {
           "description": "字段契约集合，用于驱动图表与规划。",
@@ -69,7 +109,7 @@
         "dataset_version",
         "generated_at",
         "row_count",
-        "field_count",
+        "sampling",
         "fields"
       ],
       "title": "DatasetSummary",
@@ -194,6 +234,24 @@
         "statistics": {
           "$ref": "#/$defs/FieldStatistics",
           "description": "字段的统计信息，用于质量与推荐。"
+        },
+        "temporal_granularity_candidates": {
+          "description": "若字段语义为时间，则给出支持的时间粒度候选集合。",
+          "items": {
+            "enum": [
+              "second",
+              "minute",
+              "hour",
+              "day",
+              "week",
+              "month",
+              "quarter",
+              "year"
+            ],
+            "type": "string"
+          },
+          "title": "Temporal Granularity Candidates",
+          "type": "array"
         }
       },
       "required": [
@@ -336,6 +394,12 @@
   "additionalProperties": false,
   "description": "完整的数据集画像契约。",
   "properties": {
+    "x-spec-version": {
+      "default": "2.0.0",
+      "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+      "title": "X-Spec-Version",
+      "type": "string"
+    },
     "dataset_id": {
       "description": "数据集的唯一标识。",
       "minLength": 1,
@@ -398,12 +462,6 @@
       "title": "Row Count",
       "type": "integer"
     },
-    "field_count": {
-      "description": "字段数量。",
-      "minimum": 0,
-      "title": "Field Count",
-      "type": "integer"
-    },
     "total_bytes": {
       "anyOf": [
         {
@@ -444,7 +502,6 @@
     "created_at",
     "profiled_at",
     "row_count",
-    "field_count",
     "hash_digest",
     "summary"
   ],
@@ -452,5 +509,5 @@
   "type": "object",
   "$id": "https://schemas.data-interface.local/contracts/dataset_profile.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0"
+  "version": "2.0.0"
 }

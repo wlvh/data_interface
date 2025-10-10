@@ -1,61 +1,15 @@
 {
   "$defs": {
-    "ChartCandidate": {
-      "additionalProperties": false,
-      "description": "计划中的图表模板候选项。",
-      "properties": {
-        "template_id": {
-          "description": "引用的模板 ID。",
-          "minLength": 1,
-          "title": "Template Id",
-          "type": "string"
-        },
-        "engine": {
-          "description": "渲染引擎类型。",
-          "enum": [
-            "vega-lite",
-            "echarts"
-          ],
-          "title": "Engine",
-          "type": "string"
-        },
-        "confidence": {
-          "description": "推荐置信度，范围 [0, 1]。",
-          "maximum": 1.0,
-          "minimum": 0.0,
-          "title": "Confidence",
-          "type": "number"
-        },
-        "rationale": {
-          "description": "推荐该模板的理由。",
-          "minLength": 1,
-          "title": "Rationale",
-          "type": "string"
-        },
-        "encodings": {
-          "description": "字段到视觉通道的映射集合。",
-          "items": {
-            "$ref": "#/$defs/ChartChannelMapping"
-          },
-          "minItems": 1,
-          "title": "Encodings",
-          "type": "array"
-        }
-      },
-      "required": [
-        "template_id",
-        "engine",
-        "confidence",
-        "rationale",
-        "encodings"
-      ],
-      "title": "ChartCandidate",
-      "type": "object"
-    },
     "ChartChannelMapping": {
       "additionalProperties": false,
       "description": "模板编码映射，描述字段如何绑定到视觉通道。",
       "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
         "channel": {
           "description": "视觉通道名称，例如 x、y、color。",
           "minLength": 1,
@@ -88,10 +42,87 @@
       "title": "ChartChannelMapping",
       "type": "object"
     },
-    "ExplanationOutline": {
+    "ChartPlanItem": {
+      "additionalProperties": false,
+      "description": "计划中的图表模板候选项。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "template_id": {
+          "description": "引用的模板 ID。",
+          "minLength": 1,
+          "title": "Template Id",
+          "type": "string"
+        },
+        "engine": {
+          "description": "渲染引擎类型。",
+          "enum": [
+            "vega-lite",
+            "echarts"
+          ],
+          "title": "Engine",
+          "type": "string"
+        },
+        "confidence": {
+          "description": "推荐置信度，范围 [0, 1]。",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "rationale": {
+          "description": "推荐该模板的理由。",
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "encoding": {
+          "description": "字段到视觉通道的映射集合。",
+          "items": {
+            "$ref": "#/$defs/ChartChannelMapping"
+          },
+          "minItems": 1,
+          "title": "Encoding",
+          "type": "array"
+        },
+        "layout_hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "对布局或联动的补充说明。",
+          "title": "Layout Hint"
+        }
+      },
+      "required": [
+        "template_id",
+        "engine",
+        "confidence",
+        "rationale",
+        "encoding"
+      ],
+      "title": "ChartPlanItem",
+      "type": "object"
+    },
+    "ExplainOutline": {
       "additionalProperties": false,
       "description": "解释 Agent 的提纲，用于指导 Markdown 产出。",
       "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
         "bullets": {
           "description": "建议解释内容的要点列表。",
           "items": {
@@ -105,21 +136,27 @@
       "required": [
         "bullets"
       ],
-      "title": "ExplanationOutline",
+      "title": "ExplainOutline",
       "type": "object"
     },
-    "FieldRecommendation": {
+    "FieldPlanItem": {
       "additionalProperties": false,
-      "description": "字段推荐结果，明确字段角色与推荐理由。",
+      "description": "字段规划条目，描述字段角色与操作建议。",
       "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
         "field_name": {
-          "description": "被推荐的字段名称。",
+          "description": "字段名称。",
           "minLength": 1,
           "title": "Field Name",
           "type": "string"
         },
         "semantic_role": {
-          "description": "推荐的语义角色。",
+          "description": "字段在本计划中的语义角色。",
           "enum": [
             "dimension",
             "measure",
@@ -130,31 +167,87 @@
           "type": "string"
         },
         "priority": {
-          "description": "推荐排序优先级，数值越小优先级越高。",
+          "description": "推荐优先级，数值越小越靠前。",
           "minimum": 0,
           "title": "Priority",
           "type": "integer"
         },
-        "reason": {
-          "description": "推荐该字段的原因描述。",
+        "rationale": {
+          "description": "选择该字段的理由。",
           "minLength": 1,
-          "title": "Reason",
+          "title": "Rationale",
           "type": "string"
+        },
+        "operations": {
+          "description": "针对该字段的派生或变换建议。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Operations",
+          "type": "array"
         }
       },
       "required": [
         "field_name",
         "semantic_role",
         "priority",
-        "reason"
+        "rationale"
       ],
-      "title": "FieldRecommendation",
+      "title": "FieldPlanItem",
+      "type": "object"
+    },
+    "PlanAssumption": {
+      "additionalProperties": false,
+      "description": "规划过程中显式声明的假设与约束。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "statement": {
+          "description": "假设的文本描述。",
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        },
+        "confidence": {
+          "description": "假设成立的置信度，范围 [0, 1]。",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "impact": {
+          "description": "假设失效对计划的影响等级。",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Impact",
+          "type": "string"
+        }
+      },
+      "required": [
+        "statement",
+        "confidence",
+        "impact"
+      ],
+      "title": "PlanAssumption",
       "type": "object"
     },
     "TransformDraft": {
       "additionalProperties": false,
       "description": "计划中的数据变换草案。",
       "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
         "transform_id": {
           "description": "变换草案唯一标识。",
           "format": "uuid",
@@ -203,6 +296,12 @@
   "additionalProperties": false,
   "description": "统一的计划契约，连接意图与图表交付。",
   "properties": {
+    "x-spec-version": {
+      "default": "2.0.0",
+      "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+      "title": "X-Spec-Version",
+      "type": "string"
+    },
     "plan_id": {
       "description": "计划唯一标识。",
       "format": "uuid",
@@ -233,22 +332,31 @@
       "title": "Generated At",
       "type": "string"
     },
-    "field_recommendations": {
-      "description": "推荐使用的字段集合。",
+    "assumptions": {
+      "description": "规划过程显式依赖的假设集合。",
       "items": {
-        "$ref": "#/$defs/FieldRecommendation"
+        "$ref": "#/$defs/PlanAssumption"
       },
       "minItems": 1,
-      "title": "Field Recommendations",
+      "title": "Assumptions",
       "type": "array"
     },
-    "chart_candidates": {
-      "description": "图表模板候选集合。",
+    "field_plan": {
+      "description": "字段规划明细。",
       "items": {
-        "$ref": "#/$defs/ChartCandidate"
+        "$ref": "#/$defs/FieldPlanItem"
       },
       "minItems": 1,
-      "title": "Chart Candidates",
+      "title": "Field Plan",
+      "type": "array"
+    },
+    "chart_plan": {
+      "description": "图表候选明细。",
+      "items": {
+        "$ref": "#/$defs/ChartPlanItem"
+      },
+      "minItems": 1,
+      "title": "Chart Plan",
       "type": "array"
     },
     "transform_drafts": {
@@ -260,8 +368,8 @@
       "title": "Transform Drafts",
       "type": "array"
     },
-    "explanation_outline": {
-      "$ref": "#/$defs/ExplanationOutline",
+    "explain_outline": {
+      "$ref": "#/$defs/ExplainOutline",
       "description": "解释 Agent 参考的提纲。"
     }
   },
@@ -271,14 +379,15 @@
     "dataset_id",
     "refined_goal",
     "generated_at",
-    "field_recommendations",
-    "chart_candidates",
+    "assumptions",
+    "field_plan",
+    "chart_plan",
     "transform_drafts",
-    "explanation_outline"
+    "explain_outline"
   ],
   "title": "Plan",
   "type": "object",
   "$id": "https://schemas.data-interface.local/contracts/plan.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0"
+  "version": "2.0.0"
 }

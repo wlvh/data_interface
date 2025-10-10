@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Callable, TypeVar
 
 import pydantic
@@ -52,13 +53,23 @@ except ImportError:  # pragma: no cover
 
 model_validator = _model_validator
 
-def model_dump(payload: Any) -> Any:
-    """兼容 v1/v2 的模型序列化接口。"""
+def model_dump(payload: Any, **kwargs: Any) -> Any:
+    """兼容 v1/v2 的模型序列化接口，确保输出可直接 JSON 序列化。"""
 
+    if "by_alias" not in kwargs:
+        kwargs["by_alias"] = True
+    if hasattr(payload, "model_dump_json"):
+        json_payload = payload.model_dump_json(**kwargs)
+        return json.loads(json_payload)
     if hasattr(payload, "model_dump"):
-        return payload.model_dump()
+        if "mode" not in kwargs:
+            kwargs["mode"] = "json"
+        return payload.model_dump(**kwargs)
+    if hasattr(payload, "json"):
+        json_payload = payload.json(**kwargs)
+        return json.loads(json_payload)
     if hasattr(payload, "dict"):
-        return payload.dict()
+        return payload.dict(**kwargs)
     raise TypeError("无法序列化给定对象，需为 Pydantic 模型。")
 
 

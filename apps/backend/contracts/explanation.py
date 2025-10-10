@@ -7,7 +7,7 @@ from typing import List
 
 from apps.backend.compat import ConfigDict, Field, model_validator
 
-from apps.backend.contracts.metadata import ContractModel
+from apps.backend.contracts.metadata import VersionedContractModel
 
 
 def _ensure_utc(dt: datetime, field_name: str) -> None:
@@ -21,7 +21,7 @@ def _ensure_utc(dt: datetime, field_name: str) -> None:
         raise ValueError(message)
 
 
-class ExplanationArtifact(ContractModel):
+class ExplanationArtifact(VersionedContractModel):
     """解释 Agent 输出的结构化结果。"""
 
     model_config = ConfigDict(extra="forbid")

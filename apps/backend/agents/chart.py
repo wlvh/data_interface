@@ -8,8 +8,8 @@ from typing import List
 from uuid import uuid4
 
 from apps.backend.agents.base import Agent, AgentContext, AgentOutcome
-from apps.backend.contracts.chart_spec import ChartSpec
-from apps.backend.contracts.plan import ChartCandidate, Plan
+from apps.backend.contracts.chart_spec import ChartA11y, ChartLayout, ChartSpec
+from apps.backend.contracts.plan import ChartPlanItem, Plan
 from apps.backend.contracts.trace import SpanSLO
 
 LOGGER = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class ChartPayload:
     table_id: str
 
 
-def _select_candidate(candidates: List[ChartCandidate]) -> ChartCandidate:
+def _select_candidate(candidates: List[ChartPlanItem]) -> ChartPlanItem:
     """按置信度排序，选择最优候选。"""
 
     sorted_candidates = sorted(candidates, key=lambda candidate: candidate.confidence, reverse=True)
@@ -44,20 +44,29 @@ class ChartRecommendationAgent(Agent):
         """生成单个 ChartSpec。"""
 
         span_id = context.trace_recorder.start_span(
-            node_name="chart",
+            operation="chart.recommend",
             agent_name=self.name,
             slo=self.slo,
             parent_span_id=None,
             model_name=None,
             prompt_version=None,
         )
-        candidate = _select_candidate(candidates=payload.plan.chart_candidates)
+        candidate = _select_candidate(candidates=payload.plan.chart_plan)
         chart_spec = ChartSpec(
             chart_id=str(uuid4()),
             template_id=candidate.template_id,
             engine=candidate.engine,
-            encodings=candidate.encodings,
+            encoding=candidate.encoding,
             data_source=payload.table_id,
+            scales=[],
+            legends=[],
+            axes=[],
+            layout=ChartLayout(width=720, height=480, padding=24, theme="default"),
+            a11y=ChartA11y(
+                title=f"{payload.plan.refined_goal} 图表",
+                summary="结合推荐字段自动生成的首图方案",
+                annotations=[],
+            ),
             parameters={},
         )
         trace_span = context.trace_recorder.finish_span(
@@ -78,4 +87,3 @@ class ChartRecommendationAgent(Agent):
             span_id=span_id,
             trace_span=trace_span,
         )
-

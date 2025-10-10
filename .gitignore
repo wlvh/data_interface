@@ -58,4 +58,4 @@ data/
 tmp/
 temp/
 *.tmp
-
+var/api_logs/

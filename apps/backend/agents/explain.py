@@ -51,7 +51,7 @@ class ExplanationAgent(Agent):
         """
 
         span_id = context.trace_recorder.start_span(
-            node_name="explain",
+            operation="explain.summarize",
             agent_name=self.name,
             slo=self.slo,
             parent_span_id=None,
@@ -62,12 +62,15 @@ class ExplanationAgent(Agent):
         plan = payload.plan
         bullet_lines = []
         bullet_lines.append(f"- 任务目标：{plan.refined_goal}")
-        bullet_lines.append(f"- 推荐字段：{', '.join(item.field_name for item in plan.field_recommendations[:3])}")
-        chart = plan.chart_candidates[0]
+        top_fields = ", ".join(item.field_name for item in plan.field_plan[:3])
+        bullet_lines.append(f"- 推荐字段：{top_fields}")
+        chart = plan.chart_plan[0]
         bullet_lines.append(f"- 主推图表：{chart.template_id}（{chart.rationale}）")
         if payload.transform_preview is not None:
             bullet_lines.append(f"- 预览变换：{payload.transform_preview}")
-        bullet_lines.append(f"- 数据行数：{profile.row_count}，字段数：{profile.field_count}")
+        bullet_lines.append(
+            f"- 数据行数：{profile.row_count}，字段数：{len(profile.summary.fields)}",
+        )
         markdown_lines = ["## 计划摘要", ""]
         markdown_lines.extend(bullet_lines)
         markdown = "\n".join(markdown_lines)
@@ -93,4 +96,3 @@ class ExplanationAgent(Agent):
             span_id=span_id,
             trace_span=trace_span,
         )
-

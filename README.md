@@ -28,7 +28,7 @@ Data Interface 是一个面向多行业、多数据域的智能分析操作系�
 | `apps/backend/contracts/` | 数据契约与领域模型 | `dataset_profile.py`、`plan.py`、`trace.py` 等及镜像 `schema/*.json`。 |
 | `apps/backend/tests/` | 契约与流程校验 | Schema 同步测试、状态图单元测试。 |
 | `apps/frontend/` | 主产品前端（待 TS 化） | Vite App、Redux 迁移中，承载编码货架、图表模板、AI 交互界面。 |
-| `var/` | 运行时落盘 | `traces/` 存储 Trace JSON 以支持回放。 |
+| `var/` | 运行时落盘 | `traces/` 存储 Trace JSON；`api_logs/` 落盘 API 请求/响应。 |
 | `tmp_traces/` | 开发期调试输出 | 拆分调试阶段的 Trace 栈，便于对比离线与线上结果。 |
 | `AGENTS.md` | Agent 策略草案 | 描述现有/计划中的多 Agent 协作框架 |
 | `Walmart.csv` | 演示数据 | 示例数据集，未来应替换为可配置数据源 |
@@ -43,7 +43,7 @@ Data Interface 是一个面向多行业、多数据域的智能分析操作系�
 4. **Transform Execute / Aggregate Bin**：执行数据派生，产出样本、指标、日志与 SLO。
 5. **Chart Recommend / Natural Edit**：模板 + 映射生成 `ChartSpec`，自然语言继续迭代。
 6. **Explain Agent**：以“数据摘要 + 代码 + 结果”为输入，输出短 Markdown。
-7. **Task Stream & Trace Replay**：`TaskRunner` 挂载 SSE，推送节点完成事件，并将 Trace 树持久化到 `TraceStore` 以支持回放。
+7. **Task Stream & Trace Replay**：`TaskRunner` 推送节点事件，并将 Trace 树与 API 进出参落盘，便于离线回放。
 
 ## 工程现状
 
@@ -78,6 +78,16 @@ npm run dev
 cd apps/backend
 pytest
 ```
+
+### API 回放与审计
+
+- **落盘路径**：所有 FastAPI 请求/响应会写入 `var/api_logs/<endpoint>/`，文件名为 UTC 时间戳（例如 `20250101T010203456789Z_request.json` 与 `..._response.json`）。
+- **回放步骤**：
+  1. 读取 `*_request.json`，作为请求体重新调用对应接口；
+  2. 获取最新响应，与 `*_response.json` 对比（结构与数据）；
+  3. 若需还原整条链路，可结合 `var/traces/<task_id>.json` 与 `apps/backend/tests/test_pipeline.py`，复现 Span 序列。
+
+> 注意：所有落盘文件默认使用 UTF-8 编码，确保在版本控制与归档时保持一致。
 
 未来新增 API/Agent 时，请在对应目录建立模块级 README，说明输入输出契约、SLO 与回放策略。
 

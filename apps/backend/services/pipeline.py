@@ -18,14 +18,16 @@ from apps.backend.agents import (
     TransformPayload,
     ChartPayload,
     ChartRecommendationAgent,
+    TransformArtifacts,
 )
 from apps.backend.agents.base import AgentOutcome
 from apps.backend.contracts.dataset_profile import DatasetProfile
+from apps.backend.contracts.encoding_patch import EncodingPatch, EncodingPatchOp
 from apps.backend.contracts.explanation import ExplanationArtifact
 from apps.backend.contracts.plan import Plan
 from apps.backend.contracts.chart_spec import ChartSpec
 from apps.backend.contracts.trace import TraceRecord, TraceSpan
-from apps.backend.contracts.transform import OutputTable
+from apps.backend.contracts.transform import OutputTable, PreparedTable
 from apps.backend.infra.tracing import TraceRecorder
 from apps.backend.services import OrchestratorResult, StateMachineOrchestrator, StateNode
 
@@ -60,8 +62,10 @@ class PipelineOutcome:
 
     profile: DatasetProfile
     plan: Plan
-    table: OutputTable
+    prepared_table: PreparedTable
+    output_table: OutputTable
     chart: ChartSpec
+    encoding_patch: EncodingPatch
     explanation: ExplanationArtifact
     trace: TraceRecord
     spans: list[TraceSpan]
@@ -115,10 +119,12 @@ def execute_pipeline(
         if "plan" not in shared or "transform" not in shared:
             raise ValueError("缺少计划或变换结果，无法生成图表。")
         plan = shared["plan"]
-        table = shared["transform"]
+        artifacts = shared["transform"]
+        if not isinstance(artifacts, TransformArtifacts):
+            raise TypeError("变换输出类型非法。")
         return ChartPayload(
             plan=plan,
-            table_id=table.table_id,
+            table_id=artifacts.output_table.output_table_id,
         )
 
     def build_explanation_payload(shared: dict[str, object]) -> ExplanationPayload:
@@ -128,8 +134,10 @@ def execute_pipeline(
             raise ValueError(message)
         plan = shared["plan"]
         profile = shared["scan"]
-        table = shared["transform"]
-        preview = f"{table.table_id}: {table.row_count} 行"
+        artifacts = shared["transform"]
+        if not isinstance(artifacts, TransformArtifacts):
+            raise TypeError("变换输出类型非法。")
+        preview = f"{artifacts.output_table.output_table_id}: {artifacts.output_table.metrics.rows_out} 行"
         return ExplanationPayload(
             dataset_profile=profile,
             plan=plan,
@@ -152,9 +160,22 @@ def execute_pipeline(
     )
     profile = result.outputs["scan"]
     plan = result.outputs["plan"]
-    table = result.outputs["transform"]
+    artifacts = result.outputs["transform"]
+    if not isinstance(artifacts, TransformArtifacts):
+        raise TypeError("变换节点输出类型非法。")
     chart = result.outputs["chart"]
     explanation = result.outputs["explain"]
+    encoding_patch = EncodingPatch(
+        target_chart_id=chart.chart_id,
+        ops=[
+            EncodingPatchOp(
+                op_type="add",
+                path=["parameters", "notes"],
+                value=f"initial render for {plan.refined_goal}",
+            ),
+        ],
+        rationale="记录初次编码生成时的模板参数。",
+    )
     trace = trace_recorder.build_trace(
         task_id=config.task_id,
         dataset_id=config.dataset_id,
@@ -163,8 +184,10 @@ def execute_pipeline(
     return PipelineOutcome(
         profile=profile,
         plan=plan,
-        table=table,
+        prepared_table=artifacts.prepared_table,
+        output_table=artifacts.output_table,
         chart=chart,
+        encoding_patch=encoding_patch,
         explanation=explanation,
         trace=trace,
         spans=result.spans,

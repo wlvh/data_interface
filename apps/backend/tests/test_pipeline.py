@@ -1,12 +1,10 @@
-"""多 Agent 流程与任务管理测试。"""
+"""多 Agent 流程与任务管理测试（使用真实 pandas 环境）。"""
 
 from __future__ import annotations
 
 import asyncio
-import csv
-from types import SimpleNamespace
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import List, Tuple
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,6 +16,7 @@ from apps.backend.agents import (
     DatasetScannerAgent,
     ExplanationAgent,
     PlanRefinementAgent,
+    TransformArtifacts,
     TransformExecutionAgent,
     ChartRecommendationAgent,
 )
@@ -28,210 +27,21 @@ from apps.backend.services.task_runner import TaskRunner
 from apps.backend.stores import DatasetStore, TraceStore
 
 
-class FakeIsnaResult:
-    def __init__(self, values: List[Any]) -> None:
-        self._values = values
-
-    def sum(self) -> int:
-        return sum(1 for value in self._values if value is None)
-
-
-class FakeCounts:
-    def __init__(self, pairs: List[tuple[Any, float]]) -> None:
-        self.index = [item for item, _ in pairs]
-        self.values = [value for _, value in pairs]
-
-    def __iter__(self):
-        return iter(self.values)
-
-
-class FakeSeries:
-    def __init__(self, values: List[Any]) -> None:
-        self._values = values
-        self.dtype = self._infer_dtype()
-
-    def _infer_dtype(self) -> str:
-        for value in self._values:
-            if value is None:
-                continue
-            if isinstance(value, bool):
-                return "boolean"
-            if isinstance(value, int):
-                return "integer"
-            if isinstance(value, float):
-                return "number"
-            text = str(value)
-            if "-" in text and len(text) >= 8:
-                return "datetime"
-            return "string"
-        return "string"
-
-    def isna(self) -> FakeIsnaResult:
-        return FakeIsnaResult(self._values)
-
-    def nunique(self, dropna: bool = True) -> int:
-        values = [value for value in self._values if value is not None or not dropna]
-        return len(set(values))
-
-    def dropna(self) -> "FakeSeries":
-        return FakeSeries([value for value in self._values if value is not None])
-
-    def value_counts(self, normalize: bool = False) -> FakeCounts:
-        counts: Dict[Any, int] = {}
-        for value in self._values:
-            if value is None:
-                continue
-            counts[value] = counts.get(value, 0) + 1
-        items = sorted(counts.items(), key=lambda item: item[1], reverse=True)
-        if normalize and items:
-            total = sum(counts.values())
-            normalized = [(label, count / total) for label, count in items]
-            return FakeCounts(normalized)
-        return FakeCounts(items)
-
-    def head(self, limit: int) -> "FakeSeries":
-        return FakeSeries(self._values[:limit])
-
-    def min(self) -> Any:
-        values = [value for value in self._values if value is not None]
-        return min(values) if values else None
-
-    def max(self) -> Any:
-        values = [value for value in self._values if value is not None]
-        return max(values) if values else None
-
-    def __iter__(self):
-        return iter(self._values)
-
-    @property
-    def empty(self) -> bool:
-        return len(self._values) == 0
-
-
-class FakeDataFrame:
-    def __init__(self, columns: List[str], rows: List[Dict[str, Any]]) -> None:
-        self._columns = columns
-        self._rows = rows
-
-    @property
-    def shape(self) -> tuple[int, int]:
-        return (len(self._rows), len(self._columns))
-
-    @property
-    def columns(self) -> List[str]:
-        return list(self._columns)
-
-    @property
-    def empty(self) -> bool:
-        return not self._rows
-
-    def __getitem__(self, column: str) -> FakeSeries:
-        return FakeSeries([row.get(column) for row in self._rows])
-
-    def head(self, limit: int) -> "FakeDataFrame":
-        return FakeDataFrame(self._columns, self._rows[:limit])
-
-    def iterrows(self):
-        for index, row in enumerate(self._rows):
-            yield index, row.copy()
-
-    def dropna(self) -> "FakeDataFrame":
-        cleaned = [row for row in self._rows if None not in row.values()]
-        return FakeDataFrame(self._columns, cleaned)
-
-    def groupby(self, column: str, as_index: bool = False) -> "FakeGroupBy":
-        return FakeGroupBy(self._rows, column, as_index)
-
-    def sort_values(self, by: str, ascending: bool = True) -> "FakeDataFrame":
-        sorted_rows = sorted(self._rows, key=lambda row: row.get(by), reverse=not ascending)
-        return FakeDataFrame(self._columns, sorted_rows)
-
-
-class FakeGroupBy:
-    def __init__(self, rows: List[Dict[str, Any]], key: str, as_index: bool) -> None:
-        self._rows = rows
-        self._key = key
-        self._as_index = as_index
-
-    def __getitem__(self, value_column: str) -> "FakeAggregator":
-        return FakeAggregator(self._rows, self._key, value_column, self._as_index)
-
-
-class FakeAggregator:
-    def __init__(self, rows: List[Dict[str, Any]], key: str, value_column: str, as_index: bool) -> None:
-        self._rows = rows
-        self._key = key
-        self._value_column = value_column
-        self._as_index = as_index
-
-    def sum(self) -> FakeDataFrame:
-        totals: Dict[Any, float] = {}
-        for row in self._rows:
-            label = row.get(self._key)
-            value = row.get(self._value_column)
-            if value is None:
-                continue
-            totals[label] = totals.get(label, 0.0) + float(value)
-        aggregated = [
-            {self._key: key, self._value_column: totals[key]}
-            for key in totals
-        ]
-        return FakeDataFrame([self._key, self._value_column], aggregated)
-
-
-class FakePandasModule:
-    def __init__(self) -> None:
-        self.api = SimpleNamespace(
-            types=SimpleNamespace(
-                is_integer_dtype=lambda dtype: dtype == "integer",
-                is_numeric_dtype=lambda dtype: dtype in {"integer", "number"},
-                is_bool_dtype=lambda dtype: dtype == "boolean",
-                is_datetime64_any_dtype=lambda dtype: dtype == "datetime",
-            ),
-        )
-        self.DataFrame = FakeDataFrame
-
-    def read_csv(self, path: Path) -> FakeDataFrame:
-        with path.open(encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            rows: List[Dict[str, Any]] = []
-            for raw in reader:
-                parsed: Dict[str, Any] = {}
-                for column, value in raw.items():
-                    if value == "":
-                        parsed[column] = None
-                        continue
-                    try:
-                        parsed[column] = int(value)
-                        continue
-                    except ValueError:
-                        pass
-                    try:
-                        parsed[column] = float(value)
-                        continue
-                    except ValueError:
-                        pass
-                    parsed[column] = value
-                rows.append(parsed)
-        return FakeDataFrame(reader.fieldnames or [], rows)
-
-
-@pytest.fixture(autouse=True)
-def patch_pandas(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setitem(__import__("sys").modules, "pandas", FakePandasModule())
-
-
 def _create_sample_dataset(path: Path) -> None:
-    path.write_text(
+    """写入用于测试的简单 CSV 数据。"""
+
+    payload = (
         "store,sales,date\n"
         "A,10,2024-01-01\n"
         "B,25,2024-01-02\n"
-        "A,15,2024-01-03\n",
-        encoding="utf-8",
+        "A,15,2024-01-03\n"
     )
+    path.write_text(payload, encoding="utf-8")
 
 
 def _build_agents() -> PipelineAgents:
+    """构造流程所需的 Agent 集合。"""
+
     return PipelineAgents(
         scanner=DatasetScannerAgent(),
         planner=PlanRefinementAgent(),
@@ -241,8 +51,8 @@ def _build_agents() -> PipelineAgents:
     )
 
 
-async def _run_task_and_wait(runner: TaskRunner, config: PipelineConfig) -> tuple[str, List[dict]]:
-    """提交任务并消费完所有事件，返回 task_id 与事件列表。"""
+async def _run_task_and_wait(runner: TaskRunner, config: PipelineConfig) -> Tuple[str, List[dict]]:
+    """提交任务并消费完所有事件，返回 task_id 与事件记录。"""
 
     events: List[dict] = []
     task_id = await runner.submit_task(config=config)
@@ -256,10 +66,10 @@ async def _run_task_and_wait(runner: TaskRunner, config: PipelineConfig) -> tupl
 
 
 def test_execute_pipeline_returns_outcome(tmp_path: Path) -> None:
-    """执行完整流程应返回图表、表格与 trace。"""
+    """执行完整流程应返回图表、编码补丁与回放友好的表结构。"""
 
     dataset_path = tmp_path / "sample.csv"
-    _create_sample_dataset(dataset_path)
+    _create_sample_dataset(path=dataset_path)
     agents = _build_agents()
     clock = UtcClock()
     trace_recorder = TraceRecorder(clock=clock)
@@ -285,18 +95,20 @@ def test_execute_pipeline_returns_outcome(tmp_path: Path) -> None:
         agents=agents,
     )
     assert outcome.plan.dataset_id == config.dataset_id
-    assert outcome.table.row_count >= 1
-    assert outcome.chart.data_source == outcome.table.table_id
+    assert isinstance(outcome.prepared_table.schema, list)
+    assert outcome.output_table.metrics.rows_out >= 1
+    assert outcome.chart.data_source == outcome.output_table.output_table_id
+    assert outcome.encoding_patch.target_chart_id == outcome.chart.chart_id
     assert outcome.trace.task_id == config.task_id
 
 
 def test_task_runner_streams_events(tmp_path: Path) -> None:
-    """TaskRunner 应推送开始、节点完成与结束事件。"""
+    """TaskRunner 应推送开始、节点完成与结束事件，并生成行数统计。"""
 
     async def _run() -> None:
         dataset_path = tmp_path / "runner.csv"
         trace_dir = tmp_path / "traces"
-        _create_sample_dataset(dataset_path)
+        _create_sample_dataset(path=dataset_path)
         agents = _build_agents()
         clock = UtcClock()
         dataset_store = DatasetStore()
@@ -321,6 +133,8 @@ def test_task_runner_streams_events(tmp_path: Path) -> None:
         assert "started" in event_types
         assert "node_completed" in event_types
         assert event_types[-1] == "completed"
+        completed_event = next(item for item in events if item["type"] == "completed")
+        assert completed_event["rows_out"] >= 1
         trace = trace_store.require(task_id=task_id)
         assert trace.task_id == task_id
         profile = dataset_store.require(dataset_id=config.dataset_id)
@@ -330,12 +144,12 @@ def test_task_runner_streams_events(tmp_path: Path) -> None:
 
 
 def test_task_result_endpoint_returns_snapshot(tmp_path: Path) -> None:
-    """异步任务完成后，API 应返回结构化结果。"""
+    """异步任务完成后，API 应返回包含编码补丁的结果快照。"""
 
     async def _run() -> None:
         dataset_path = tmp_path / "runner_api.csv"
         trace_dir = tmp_path / "traces_api"
-        _create_sample_dataset(dataset_path)
+        _create_sample_dataset(path=dataset_path)
         agents = _build_agents()
         clock = UtcClock()
         dataset_store = DatasetStore()
@@ -359,6 +173,7 @@ def test_task_result_endpoint_returns_snapshot(tmp_path: Path) -> None:
         snapshot = runner.get_snapshot(task_id=task_id)
         assert snapshot.status == "completed"
         assert snapshot.outcome is not None
+        assert snapshot.outcome.output_table.metrics.rows_out >= 1
         app = create_app()
         app.dependency_overrides[get_task_runner] = lambda: runner
         client = TestClient(app)
@@ -367,6 +182,8 @@ def test_task_result_endpoint_returns_snapshot(tmp_path: Path) -> None:
         payload = response.json()
         assert payload["status"] == "completed"
         assert payload["result"]["plan"]["dataset_id"] == config.dataset_id
+        assert payload["result"]["output_table"]["metrics"]["rows_out"] >= 1
+        assert payload["result"]["encoding_patch"]["target_chart_id"] == payload["result"]["chart"]["chart_id"]
         assert payload["result"]["trace"]["task_id"] == task_id
         app.dependency_overrides.clear()
 

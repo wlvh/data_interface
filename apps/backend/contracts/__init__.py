@@ -5,46 +5,76 @@
 能够被序列化、落盘并复现。
 """
 
+from apps.backend.contracts.chart_spec import (
+    ChartA11y,
+    ChartAxis,
+    ChartLayout,
+    ChartLegend,
+    ChartScale,
+    ChartSpec,
+)
 from apps.backend.contracts.chart_template import ChartEncoding, ChartTemplate
-from apps.backend.contracts.dataset_profile import DatasetProfile, DatasetSummary
-from apps.backend.contracts.fields import FieldSchema, FieldStatistics, ValueRange
-from apps.backend.contracts.chart_spec import ChartSpec
-from apps.backend.contracts.transform import OutputTable, TransformLog
+from apps.backend.contracts.dataset_profile import DatasetProfile, DatasetSampling, DatasetSummary
+from apps.backend.contracts.encoding_patch import EncodingPatch, EncodingPatchOp
 from apps.backend.contracts.explanation import ExplanationArtifact
+from apps.backend.contracts.fields import FieldSchema, FieldStatistics, TemporalGranularity, ValueRange
 from apps.backend.contracts.plan import (
-    ChartCandidate,
     ChartChannelMapping,
-    ExplanationOutline,
-    FieldRecommendation,
+    ChartPlanItem,
+    ExplainOutline,
+    FieldPlanItem,
     Plan,
+    PlanAssumption,
     TransformDraft,
 )
-from apps.backend.contracts.trace import (
-    SpanMetrics,
-    SpanSLO,
-    TraceRecord,
-    TraceSpan,
+from apps.backend.contracts.trace import SpanEvent, SpanMetrics, SpanSLO, TraceRecord, TraceSpan
+from apps.backend.contracts.transform import (
+    OutputMetrics,
+    OutputTable,
+    PreparedTable,
+    PreparedTableLimits,
+    PreparedTableStats,
+    TableColumn,
+    TableSample,
+    TransformLog,
 )
 
 __all__ = [
     "ChartEncoding",
     "ChartTemplate",
-    "DatasetProfile",
+    "ChartSpec",
+    "ChartScale",
+    "ChartLegend",
+    "ChartAxis",
+    "ChartLayout",
+    "ChartA11y",
+    "DatasetSampling",
     "DatasetSummary",
+    "DatasetProfile",
+    "EncodingPatch",
+    "EncodingPatchOp",
+    "ExplanationArtifact",
     "FieldSchema",
     "FieldStatistics",
+    "TemporalGranularity",
     "ValueRange",
-    "ChartSpec",
-    "FieldRecommendation",
+    "PlanAssumption",
+    "FieldPlanItem",
     "ChartChannelMapping",
-    "ChartCandidate",
+    "ChartPlanItem",
     "TransformDraft",
+    "ExplainOutline",
+    "PreparedTable",
+    "PreparedTableStats",
+    "PreparedTableLimits",
+    "TableColumn",
+    "TableSample",
+    "OutputMetrics",
     "OutputTable",
     "TransformLog",
-    "ExplanationOutline",
-    "ExplanationArtifact",
     "Plan",
     "SpanSLO",
+    "SpanEvent",
     "SpanMetrics",
     "TraceSpan",
     "TraceRecord",

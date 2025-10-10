@@ -8,9 +8,10 @@ from pydantic import BaseModel, Field
 
 from apps.backend.contracts.chart_spec import ChartSpec
 from apps.backend.contracts.dataset_profile import DatasetProfile
+from apps.backend.contracts.encoding_patch import EncodingPatch
 from apps.backend.contracts.explanation import ExplanationArtifact
 from apps.backend.contracts.plan import Plan
-from apps.backend.contracts.transform import OutputTable
+from apps.backend.contracts.transform import OutputTable, PreparedTable
 from apps.backend.contracts.trace import TraceRecord
 
 
@@ -59,8 +60,10 @@ class PlanResponse(BaseModel):
 
     profile: DatasetProfile = Field(description="最新的数据集画像。")
     plan: Plan = Field(description="结构化计划。")
-    table: OutputTable = Field(description="主要输出表快照。")
+    prepared_table: PreparedTable = Field(description="变换前的准备表描述。")
+    output_table: OutputTable = Field(description="主要输出表快照。")
     chart: ChartSpec = Field(description="推荐图表规范。")
+    encoding_patch: EncodingPatch = Field(description="图表编码的增量补丁。")
     explanation: ExplanationArtifact = Field(description="解释 Agent 输出。")
     trace: TraceRecord = Field(description="Trace 记录。")
 
@@ -115,8 +118,10 @@ class TaskResultPayload(BaseModel):
 
     profile: DatasetProfile = Field(description="任务结束时的画像。")
     plan: Plan = Field(description="最终计划。")
-    table: OutputTable = Field(description="变换产出的数据表。")
+    prepared_table: PreparedTable = Field(description="变换输入快照。")
+    output_table: OutputTable = Field(description="变换产出的数据表。")
     chart: ChartSpec = Field(description="推荐图表规范。")
+    encoding_patch: EncodingPatch = Field(description="图表编码补丁。")
     explanation: ExplanationArtifact = Field(description="解释 Agent 输出。")
     trace: TraceRecord = Field(description="完整的 Trace 记录。")
 
