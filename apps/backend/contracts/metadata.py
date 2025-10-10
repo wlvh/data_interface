@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from apps.backend.compat import BaseModel, ConfigDict
 
 
 @dataclass(frozen=True)
@@ -67,8 +67,34 @@ def build_json_schema_extra(schema_name: str) -> dict[str, str]:
     return metadata.as_dict()
 
 
+def _convert_legacy_schema(payload: dict[str, Any]) -> dict[str, Any]:
+    """将 pydantic v1 的 schema 结果转换为 v2 风格。"""
+
+    definitions = payload.pop("definitions", None)
+    if definitions is not None:
+        payload["$defs"] = definitions
+    for key, value in list(payload.items()):
+        if isinstance(value, dict):
+            payload[key] = _convert_legacy_schema(value)
+        elif isinstance(value, list):
+            payload[key] = [
+                _convert_legacy_schema(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+    properties = payload.get("properties")
+    if isinstance(properties, dict) and "model_config" in properties:
+        properties.pop("model_config", None)
+    return payload
+
+
+_HAS_MODEL_JSON_SCHEMA = hasattr(BaseModel, "model_json_schema")
+
+
 class ContractModel(BaseModel):
     """所有契约模型的基类，统一注入 JSONSchema 元数据。"""
+
+    class Config:
+        extra = "forbid"
 
     @classmethod
     def schema_name(cls) -> str:
@@ -81,7 +107,11 @@ class ContractModel(BaseModel):
     def model_json_schema(cls, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """扩展默认的 Schema 输出，追加契约元数据。"""
 
-        schema = super().model_json_schema(*args, **kwargs)
+        if _HAS_MODEL_JSON_SCHEMA:
+            schema = super().model_json_schema(*args, **kwargs)
+        else:
+            schema = super().schema(*args, **kwargs)
+            schema = _convert_legacy_schema(schema)
         extra = build_json_schema_extra(schema_name=cls.schema_name())
         schema.update(extra)
         cls._inject_additional_properties(schema=schema)
@@ -98,4 +128,3 @@ class ContractModel(BaseModel):
             for nested in defs.values():
                 if isinstance(nested, dict):
                     ContractModel._inject_additional_properties(schema=nested)
-

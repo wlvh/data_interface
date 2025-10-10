@@ -1,0 +1,34 @@
+{
+  "title": "TransformLog",
+  "description": "变换执行过程中的日志记录。",
+  "type": "object",
+  "properties": {
+    "level": {
+      "title": "Level",
+      "description": "日志级别。",
+      "minLength": 1,
+      "type": "string"
+    },
+    "message": {
+      "title": "Message",
+      "description": "日志内容。",
+      "minLength": 1,
+      "type": "string"
+    },
+    "timestamp": {
+      "title": "Timestamp",
+      "description": "UTC 时间的日志时间戳。",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "level",
+    "message",
+    "timestamp"
+  ],
+  "additionalProperties": false,
+  "$id": "https://schemas.data-interface.local/contracts/transform_log.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0"
+}

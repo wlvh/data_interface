@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import List, Literal, Optional
 
-from pydantic import ConfigDict, Field, model_validator
+from apps.backend.compat import ConfigDict, Field, model_validator
 
 from apps.backend.contracts.metadata import ContractModel
 
@@ -215,4 +215,3 @@ class FieldSchema(ContractModel):
         if self.statistics.missing_count > 0 and not self.nullable:
             raise ValueError("存在缺失值的字段必须标记为可为空。")
         return self
-

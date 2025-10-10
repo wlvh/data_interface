@@ -1,0 +1,96 @@
+{
+  "title": "ChartSpec",
+  "description": "图表最终规范，组合模板与编码映射。",
+  "type": "object",
+  "properties": {
+    "chart_id": {
+      "title": "Chart Id",
+      "description": "图表唯一标识。",
+      "minLength": 1,
+      "type": "string"
+    },
+    "template_id": {
+      "title": "Template Id",
+      "description": "引用的基础模板 ID。",
+      "minLength": 1,
+      "type": "string"
+    },
+    "engine": {
+      "title": "Engine",
+      "description": "渲染引擎类型，例如 vega-lite。",
+      "minLength": 1,
+      "type": "string"
+    },
+    "encodings": {
+      "title": "Encodings",
+      "description": "字段到视觉通道的映射。",
+      "json_schema_extra": {
+        "minItems": 1
+      },
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ChartChannelMapping"
+      }
+    },
+    "data_source": {
+      "title": "Data Source",
+      "description": "绑定的数据表 ID。",
+      "minLength": 1,
+      "type": "string"
+    },
+    "parameters": {
+      "title": "Parameters",
+      "description": "模板参数或配置项。",
+      "type": "object"
+    }
+  },
+  "required": [
+    "chart_id",
+    "template_id",
+    "engine",
+    "encodings",
+    "data_source"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "ChartChannelMapping": {
+      "title": "ChartChannelMapping",
+      "description": "模板编码映射，描述字段如何绑定到视觉通道。",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "title": "Channel",
+          "description": "视觉通道名称，例如 x、y、color。",
+          "minLength": 1,
+          "type": "string"
+        },
+        "field_name": {
+          "title": "Field Name",
+          "description": "绑定到该通道的字段。",
+          "minLength": 1,
+          "type": "string"
+        },
+        "aggregation": {
+          "title": "Aggregation",
+          "description": "字段在该通道的聚合方式。",
+          "enum": [
+            "none",
+            "sum",
+            "avg",
+            "count"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel",
+        "field_name",
+        "aggregation"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$id": "https://schemas.data-interface.local/contracts/chart_spec.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0"
+}

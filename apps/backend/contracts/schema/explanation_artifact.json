@@ -1,0 +1,36 @@
+{
+  "title": "ExplanationArtifact",
+  "description": "解释 Agent 输出的结构化结果。",
+  "type": "object",
+  "properties": {
+    "markdown": {
+      "title": "Markdown",
+      "description": "面向用户展示的 Markdown 说明。",
+      "minLength": 1,
+      "type": "string"
+    },
+    "key_points": {
+      "title": "Key Points",
+      "description": "解释重点摘要列表。",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "generated_at": {
+      "title": "Generated At",
+      "description": "生成时间（UTC）。",
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "markdown",
+    "key_points",
+    "generated_at"
+  ],
+  "additionalProperties": false,
+  "$id": "https://schemas.data-interface.local/contracts/explanation_artifact.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0"
+}

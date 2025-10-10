@@ -1,172 +1,119 @@
 # Data Interface
 
+## 愿景与定位
 
-## 项目概述
+Data Interface 是一个面向多行业、多数据域的智能分析操作系统。我们以“Intent → Fields → Transform → Encode → Chart → Validate → Clean”的闭环为主线，目标是在任何结构化数据集上提供从模糊需求澄清到可回放可解释的最终可视化交付。现阶段演示数据为 Walmart 零售，但整体架构和契约均按通用场景设计。
 
-本项目是一个专注于零售数据分析的高性能可视化系统，采用模块化架构设计，实现了声明式参数管理、Web Worker安全沙箱和ECharts高性能渲染，支持多维度特征分析和实时交互。
+## 系统能力蓝图
 
-### 🚀 前端演示系统
+- **目标细化与计划生成**：通过 `/api/plan/refine` 驱动的规划 Agent，将用户模糊目标拆解为字段选择、可视化模板、转换草案等结构化计划。
+- **数据扫描与知识库**：`/api/data/scan` 输出字段概览、样本截面和值域摘要，作为所有下游 Agent 的标准上下文输入。
+- **可组合原子能力**：数据理解、变换、模板适配、解释生成等 Agent 以状态图编排，避免长上下文串行阻塞，并为 Trace → Span 树打基础。
+- **解释与可观测性**：独立解释 Agent 负责 Markdown 化的结果说明；全链路记录模型版本、提示、耗时、重试与错误分类，准备接入 OpenTelemetry。
+- **统一状态与可回放**：后端通过契约输出 `ChartSpec`、日志和派生表；前端以 Redux Toolkit + RTK Query 维护唯一 Store，所有交互通过 Action 驱动，可随时回放或回滚。
+- **模板化可视化**：图类型以模板+编码映射组合生成 Vega/ECharts 规范，支持自动聚合/分箱、Top-K 截断等运行前防护。
+- **用户共创体验**：自然语言与拖拽操作映射到同一状态变更入口（`replaceChart`），支持“给我惊喜”式推荐，强调从零到首图的接受效率。
 
-在 `apps/frontend/` 目录下包含了完整的生产级实现，展示了三大核心功能：
+## 目录与职责
 
-1. **门店活跃度动态权重调参** - 基于6维特征的实时评分系统（近端动量、节日提升、油价敏感度、气温敏感度、宏观适应性、稳健趋势）
-2. **高级图表交互与智能提示** - ECharts驱动的柱状图和散点图，支持悬浮Sparkline展示
-3. **散点圈选与即时聚合** - 支持矩形/套索选择，实时计算统计指标（均值、中位数、标准差、局部斜率）
+| 路径 | 角色定位 | 关键内容 |
+| --- | --- | --- |
+| `apps/backend/` | 后端与 AI 服务骨架 | FastAPI 应用、Agent 编排、契约定义、Trace 追踪。 |
+| `apps/backend/api/` | HTTP 接口层 | FastAPI 路由，现已覆盖 `/api/data/scan`、`/api/plan/refine`、`/api/trace/*`、`/api/task/*`。 |
+| `apps/backend/agents/` | 原子 Agent 能力 | 数据扫描、计划细化、变换执行、图表推荐、解释生成，以及通用 `AgentContext`。 |
+| `apps/backend/infra/` | 基础设施 | `UtcClock`、`TraceRecorder` 等跨域工具。 |
+| `apps/backend/compat/` | 兼容层 | Pydantic v1/v2 适配，统一 `ConfigDict` 与 `model_validator`。 |
+| `apps/backend/services/` | 状态图编排 | `StateMachineOrchestrator`、`pipeline.py` 与 `task_runner.py` 负责多节点组合与任务流。 |
+| `apps/backend/stores/` | 内存缓存 | `DatasetStore`、`TraceStore` 用于画像与 Trace 回放。 |
+| `apps/backend/contracts/` | 数据契约与领域模型 | `dataset_profile.py`、`plan.py`、`trace.py` 等及镜像 `schema/*.json`。 |
+| `apps/backend/tests/` | 契约与流程校验 | Schema 同步测试、状态图单元测试。 |
+| `apps/frontend/` | 主产品前端（待 TS 化） | Vite App、Redux 迁移中，承载编码货架、图表模板、AI 交互界面 |
+| `poc/` | 历史孤立实验 | 早期可视化原型（需逐步迁出或沉淀为文档示例） |
+| `docs/` | 架构规划 | 多 Agent 状态图与目录规划。 |
+| `var/` | 运行时落盘 | `traces/` 存储 Trace JSON 以支持回放。 |
+| `AGENTS.md` | Agent 策略草案 | 描述现有/计划中的多 Agent 协作框架 |
+| `Walmart.csv` | 演示数据 | 示例数据集，未来应替换为可配置数据源 |
+
+> 约定：一个文件夹只负责一个业务领域；新增能力务必先明确归属再落代码，README 必须同步更新。
+
+## 核心流程（状态图视角）
+
+1. **Intent 捕获**：UI 或自然语言请求派发 `task/submit`，后端记录 Trace Root。
+2. **Data Scan**：触发 `/api/data/scan` 生成字段知识包（Profile、采样、分布）。
+3. **Plan Refine**：调用规划 Agent，输出字段映射、模板候选、转换草案、解释提纲。
+4. **Transform Execute / Aggregate Bin**：执行数据派生，产出样本、指标、日志与 SLO。
+5. **Chart Recommend / Natural Edit**：模板 + 映射生成 `ChartSpec`，自然语言继续迭代。
+6. **Explain Agent**：以“数据摘要 + 代码 + 结果”为输入，输出短 Markdown。
+7. **Task Stream & Trace Replay**：SSE 回传链路进度，Trace 树记录全链路，用于审计和回放。
+8. **Clean**：在图/表变更后回收未引用资源，保持 Store 与持久层一致。
+
+## 工程现状
+
+- **前端技术债**：`apps/frontend/src` 仍以 JS 为主，需迁移至 TS + Redux Toolkit，并建立统一的 `ChartSpec` 适配层。
+- **后端骨架**：已落地 FastAPI `/api/data/scan`、`/api/plan/refine`、`/api/trace/*`、`/api/task/submit`、`/api/task/stream`，并完成 Scan → Plan → Transform → Chart → Explain 编排；其余 Transform API、OpenTelemetry、SLO Dashboard 仍待实现。
+- **知识库建设**：新增内存级 `DatasetStore` 与字段 Top-K 摘要，下阶段需引入持久化、分箱策略与缓存淘汰。
+- **状态同步**：`replaceChart` 等事件总线尚未统一，需在 Redux 层收口。
 
 ## 快速开始
 
-### 前端演示系统运行
+### 克隆项目
 
 ```bash
-# 克隆仓库
 git clone https://github.com/wlvh/data_interface.git
+cd data_interface
+```
 
-# 进入前端目录
-cd data_interface/apps/frontend
+### 前端演示
 
-# 安装依赖
+```bash
+cd apps/frontend
 npm install
-
-# 启动开发服务器
 npm run dev
 ```
 
-访问 http://localhost:3000 查看完整演示
+访问 `http://localhost:3000` 体验现有功能。
 
-## 核心特性
-
-### 技术架构
-
-- **模块化系统设计** - 主入口(main.js) + 运行时模块(runtime/) + UI组件(ui/) + 契约系统(contract/)
-- **声明式参数管理** - ParamManager统一管理所有参数，支持路径访问和事件驱动更新
-- **Web Worker沙箱** - 基于Acorn的AST安全检查，隔离执行环境，5秒超时控制
-- **ECharts可视化引擎** - Canvas高性能渲染，支持5万行柱状图和3万点散点图
-- **智能特征工程** - 6维特征计算（滚动窗口26周），Z-score标准化，NA智能处理
-- **可回放机制** - JSON快照导出/导入，UTC时间戳确保确定性
-
-### 性能指标
-
-- **滑块响应**: <500ms（6维权重实时更新）
-- **图表渲染**: 柱状图支持5万条数据，散点图支持3万数据点
-- **悬浮提示**: <16ms（单帧渲染，固定尺寸无抖动）
-- **圈选聚合**: <200ms（Worker异步计算）
-- **特征计算**: 滚动窗口26周，支持增量更新
-
-### 安全机制
-
-- **AST黑名单验证** - 禁用window/document/eval/fetch/XMLHttpRequest等危险标识符
-- **语法白名单** - 仅允许安全的语句类型（变量声明、函数、循环、条件等）
-- **深度数据冻结** - 输入数据使用Object.freeze防止修改
-- **执行超时控制** - 默认5000ms，可配置最大10分钟
-- **确定性执行** - 固定UTC时间(2025-09-13 12:00:00)，种子随机数生成器
-
-## 项目结构
-
-```
-data_interface/
-├── apps/
-│   ├── backend/
-│       ├── contracts/             # 通用契约模型（JSONSchema + Pydantic 镜像）
-│       │   ├── chart_template.py
-│       │   ├── dataset_profile.py
-│       │   ├── fields.py
-│       │   └── schema/*.json
-│       ├── tests/                 # 契约一致性测试
-│       │   └── test_contract_schemas.py
-│       └── __init__.py
-│   └── frontend/                # 前端演示系统
-│       ├── src/
-│       │   ├── main.js              # 应用主入口，协调所有模块
-│       │   ├── contract/            # 契约系统
-│       │   │   └── schema.js        # 数据模式定义与校验
-│       │   ├── runtime/             # 运行时核心
-│       │   │   ├── dataProcessor.js # 数据处理与特征工程
-│       │   │   ├── params/
-│       │   │   │   └── manager.js   # 参数集中管理
-│       │   │   ├── worker/
-│       │   │   │   ├── sandbox.js   # Worker沙箱执行器
-│       │   │   │   └── slotWorker.js   # Worker线程代码
-│       │   │   └── charts/
-│       │   │       └── chartManager.js # ECharts管理器
-│       │   └── ui/
-│       │       └── panels/
-│       │           └── parameterPanel.js # 参数面板UI
-│       ├── public/                 # 静态资源
-│       │   └── Walmart.csv         # 演示数据
-│       ├── index.html              # 主页面
-│       ├── package.json            # 依赖配置
-│       └── vite.config.js          # Vite构建配置
-├── Walmart.csv                 # 数据集（45店×143周）
-└── README.md                   # 本文件
-```
-
-### 版本同步说明
-
-- 后端契约直接依赖官方 `pydantic` 库生成 JSONSchema，保持与最新校验能力同步。
-- 更新契约模型后需运行 `python apps/backend/tests/test_contract_schemas.py` 或 `pytest` 以重建 `schema/*.json` 并验证镜像一致性。
-
-## 功能详解
-
-### 1. 动态权重调参系统
-
-### 2. 高级图表交互
-- **ECharts柱状图** - 支持5万条数据，DataZoom缩放
-- **散点图圈选** - 矩形/套索工具，Brush API实现
-- **悬浮Sparkline** - 近8/13周趋势迷你图表
-- **固定位置提示** - 无抖动悬浮卡片，16ms响应
-
-### 3. 实时统计分析
-- **圈选聚合** - Worker异步计算选中数据统计
-- **统计指标** - count/sum/mean/median/stdev/share
-- **局部斜率** - 样本>=5时计算敏感度
-- **结果卡片** - 格式化数字展示，占比百分比
-
-## 数据说明
-
-### Walmart销售数据集（2010-2012）
-- **数据规模**: 45家门店 × 143周 = 6,435条记录
-- **时间跨度**: 2010-02-05 至 2012-10-26
-- **核心字段**:
-  - Store: 门店ID (1-45)
-  - Date: 日期 (YYYY-MM-DD格式)
-  - Weekly_Sales: 周销售额
-  - Holiday_Flag: 节日标记 (0/1)
-  - Temperature: 温度 (华氏度)
-  - Fuel_Price: 油价
-  - CPI: 消费者价格指数
-  - Unemployment: 失业率
-- **特殊日期**: Super Bowl、Valentine's Day、Labor Day、Thanksgiving、Christmas
-
-## 开发指南
-
-### 环境要求
-- **Node.js**: 16.0+
-- **npm**: 7.0+
-- **浏览器**: 现代浏览器（Chrome 90+/Firefox 88+/Safari 14+）
-- **依赖库**:
-  - ECharts 5.5.0 (可视化)
-  - D3.js (d3-array, d3-time-format等)
-  - Acorn 8.15.0 (AST解析)
-  - Vite 5.0.0 (开发服务器)
-
-### 构建部署
+### 契约校验
 
 ```bash
-# 生产构建
-cd apps/frontend
-npm run build
-
-# 构建产物在 dist/ 目录
+cd apps/backend
+pytest
 ```
-## License
 
-MIT
+未来新增 API/Agent 时，请在对应目录建立模块级 README，说明输入输出契约、SLO 与回放策略。
+
+## 开发准则
+
+- 后端与 AI 代码统一使用 Python（UTC 时区、Pydantic 校验），前端使用 TypeScript 与 Redux Toolkit。
+- 参数集中管理，函数调用必须显式传参名；禁止使用 `.get()` 之类的隐式默认。
+- 类、函数必须编写 docstring，函数内关键逻辑块需带注释说明“为什么这样做”。
+- 禁止裸 `try/except` 或 `if/else`；捕获需指定异常类型并记录诊断信息，异常应在当前层处理或 fail fast。
+- 数据进数据出：所有模块通过 JSON/Pydantic/Typed Dict 传输，不依赖隐藏状态。
+- 避免重复代码，提炼公共逻辑为模块；优先使用列表推导、生成器等 Pythonic 写法。
+- 任何新增文件夹需在 README 的“目录与职责”表中登记；无法当期完成的事项写入 TODO。
+
+## 指标与可观测性
+
+- 每个 Agent、任务节点需定义 SLO：耗时、重试次数、失败分类。
+- Trace 采用 Span 树结构，记录模型/提示版本、输入摘要、输出摘要及错误栈。
+- 所有 I/O 结果必须可 JSON 序列化落盘，便于审计、A/B 与缓存复用。
 
 ## TODO
 
-- [ ] 建立后端最小 API (`/api/data/scan`, `/api/task/submit`, `/api/task/stream`, `/api/trace/:task_id`, `/api/trace/replay`) 及扫描落盘服务，满足双落盘与回放要求。
-- [ ] 引入 Redux Toolkit、RTK Query、SSE 客户端与 ChartSpec 适配层，完成前端 Store 重构与可回放视图态。
-- [ ] 配置 `.pre-commit-config.yaml` 与 CI 工作流，落实契约镜像门禁与体积限制等质量门。
-- [ ] 补齐安全与性能修复（UTC 全链路、圈选抽样、tooltip 贡献、图例、快照哈希、fetch 守卫、Worker 并发协议等）。
-- [ ] 规划可选增强（ChartSpec 扩展、Trace 指标、FolderCard/Ingestion）并补充自动化覆盖。
+- [x] 建立 `/api/data/scan`、`/api/plan/refine`、`/api/trace` 读取/回放与 `/api/task/*` 流水线，串联多 Agent 状态图并补充契约测试。
+- [ ] 完成剩余最小 API（`/api/transform/execute`, `/api/transform/aggregate_bin`, `/api/chart/recommend`, `/api/natural/edit`, `/api/task/stream` SSE 增强、`/api/task/submit` 扩展参数）与端到端验收脚本。
+- [ ] 接入 OpenTelemetry，输出节点级耗时/失败指标并绘制 SLO Dashboard。
+- [ ] 引入 Redux Toolkit、RTK Query、SSE 客户端与 `ChartSpec` 适配层，完成前端 Store 重构与回放。
+- [ ] 构建字段知识库与 Top-K/分箱策略，在数据扫描阶段预计算并缓存。
+- [ ] 打通 Trace → Span 全链路指标，接入 OpenTelemetry 或自研采集，定义 SLO Dashboard。
+- [ ] 引入 Redux Toolkit、RTK Query、SSE 客户端与 `ChartSpec` 适配层，完成前端 Store 重构与回放。
+- [ ] 构建字段知识库与 Top-K/分箱策略，在数据扫描阶段预计算并缓存。
+- [ ] 打通 Trace → Span 全链路指标，接入 OpenTelemetry 或自研采集，定义 SLO Dashboard。
+- [ ] 规划“给我惊喜”推荐流：数据触发器、随机问题生成、推荐接受率追踪。
+- [ ] 完成前端 TS 化与 `replaceChart` 单一入口落地，统一图表事件建模。
+- [ ] 配置 `.pre-commit-config.yaml` 与 CI，覆盖契约镜像、体积限制、安全门（UTC、采样上限、Worker 并发协议等）。
+- [ ] 梳理 `poc/` 中的沉淀价值，迁移可复用模块或补充文档示例，清退冗余资源。
 
+## License
+
+MIT

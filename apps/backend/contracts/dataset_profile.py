@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from pydantic import ConfigDict, Field, model_validator
+from apps.backend.compat import ConfigDict, Field, model_validator
 
 from apps.backend.contracts.fields import FieldSchema
 from apps.backend.contracts.metadata import ContractModel
@@ -38,7 +38,7 @@ class DatasetSummary(ContractModel):
     field_count: int = Field(description="摘要中包含的字段数量。", ge=0)
     fields: List[FieldSchema] = Field(
         description="字段契约集合，用于驱动图表与规划。",
-        min_length=1,
+        json_schema_extra={"minItems": 1},
     )
     sample_rows: List[Dict[str, str]] = Field(
         default_factory=list,
@@ -55,6 +55,8 @@ class DatasetSummary(ContractModel):
         """校验字段数量、示例行一致性以及 UTC 时间。"""
 
         _ensure_utc(dt=self.generated_at, field_name="generated_at")
+        if not self.fields:
+            raise ValueError("fields 至少需要一个字段。")
         if self.field_count != len(self.fields):
             raise ValueError("field_count 必须与 fields 长度一致。")
         for sample in self.sample_rows:
@@ -121,4 +123,3 @@ class DatasetProfile(ContractModel):
         if self.summary.dataset_version != self.dataset_version:
             raise ValueError("summary.dataset_version 必须与 dataset_version 相同。")
         return self
-

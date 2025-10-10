@@ -1,0 +1,205 @@
+{
+  "title": "TraceRecord",
+  "description": "任务级 Trace 记录。",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "title": "Task Id",
+      "description": "任务标识。",
+      "minLength": 1,
+      "type": "string"
+    },
+    "dataset_id": {
+      "title": "Dataset Id",
+      "description": "关联数据集 ID。",
+      "minLength": 1,
+      "type": "string"
+    },
+    "created_at": {
+      "title": "Created At",
+      "description": "Trace 创建时间（UTC）。",
+      "type": "string",
+      "format": "date-time"
+    },
+    "spans": {
+      "title": "Spans",
+      "description": "按执行顺序排列的 Span 列表。",
+      "json_schema_extra": {
+        "minItems": 1
+      },
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/TraceSpan"
+      }
+    }
+  },
+  "required": [
+    "task_id",
+    "dataset_id",
+    "created_at",
+    "spans"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "SpanMetrics": {
+      "title": "SpanMetrics",
+      "description": "节点执行的指标快照。",
+      "type": "object",
+      "properties": {
+        "duration_ms": {
+          "title": "Duration Ms",
+          "description": "节点执行耗时（毫秒）。",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "retry_count": {
+          "title": "Retry Count",
+          "description": "节点已经发生的重试次数。",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failure_category": {
+          "title": "Failure Category",
+          "description": "失败原因分类，成功时为空。",
+          "type": "string"
+        },
+        "failure_isolation_ratio": {
+          "title": "Failure Isolation Ratio",
+          "description": "失败隔离比例，范围 [0, 1]。",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "duration_ms",
+        "retry_count",
+        "failure_isolation_ratio"
+      ],
+      "additionalProperties": false
+    },
+    "SpanSLO": {
+      "title": "SpanSLO",
+      "description": "定义单个节点的服务目标。",
+      "type": "object",
+      "properties": {
+        "max_duration_ms": {
+          "title": "Max Duration Ms",
+          "description": "节点允许的最大耗时（毫秒）。",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_retries": {
+          "title": "Max Retries",
+          "description": "节点允许的最大重试次数。",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failure_isolation_required": {
+          "title": "Failure Isolation Required",
+          "description": "节点失败时是否必须防止级联影响。",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "max_duration_ms",
+        "max_retries",
+        "failure_isolation_required"
+      ],
+      "additionalProperties": false
+    },
+    "TraceSpan": {
+      "title": "TraceSpan",
+      "description": "Trace 树中的单个 Span。",
+      "type": "object",
+      "properties": {
+        "span_id": {
+          "title": "Span Id",
+          "description": "Span 唯一标识。",
+          "minLength": 1,
+          "type": "string"
+        },
+        "parent_span_id": {
+          "title": "Parent Span Id",
+          "description": "父 Span 标识，根节点为空。",
+          "type": "string"
+        },
+        "node_name": {
+          "title": "Node Name",
+          "description": "状态图节点名称。",
+          "minLength": 1,
+          "type": "string"
+        },
+        "agent_name": {
+          "title": "Agent Name",
+          "description": "执行该节点的 Agent 名称。",
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "description": "节点执行状态。",
+          "enum": [
+            "success",
+            "failed"
+          ],
+          "type": "string"
+        },
+        "started_at": {
+          "title": "Started At",
+          "description": "Span 开始时间（UTC）。",
+          "type": "string",
+          "format": "date-time"
+        },
+        "completed_at": {
+          "title": "Completed At",
+          "description": "Span 完成时间（UTC）。",
+          "type": "string",
+          "format": "date-time"
+        },
+        "metrics": {
+          "title": "Metrics",
+          "description": "节点执行指标。",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SpanMetrics"
+            }
+          ]
+        },
+        "slo": {
+          "title": "Slo",
+          "description": "节点目标值。",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SpanSLO"
+            }
+          ]
+        },
+        "model_name": {
+          "title": "Model Name",
+          "description": "调用的模型名称，非模型节点为空。",
+          "type": "string"
+        },
+        "prompt_version": {
+          "title": "Prompt Version",
+          "description": "提示词版本标识，非模型节点为空。",
+          "type": "string"
+        }
+      },
+      "required": [
+        "span_id",
+        "node_name",
+        "agent_name",
+        "status",
+        "started_at",
+        "completed_at",
+        "metrics",
+        "slo"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$id": "https://schemas.data-interface.local/contracts/trace_record.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0"
+}

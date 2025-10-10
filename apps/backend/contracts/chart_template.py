@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Dict, List, Literal, Optional
 
-from pydantic import ConfigDict, Field, model_validator
+from apps.backend.compat import ConfigDict, Field, model_validator
 
 from apps.backend.contracts.metadata import ContractModel
 
@@ -93,7 +93,7 @@ class ChartTemplate(ContractModel):
     ] = Field(description="对应的可视化基础图元类型。")
     encodings: List[ChartEncoding] = Field(
         description="模板支持的编码通道集合。",
-        min_length=1,
+        json_schema_extra={"minItems": 1},
     )
     default_config: Dict[str, object] = Field(
         default_factory=dict,
@@ -101,13 +101,17 @@ class ChartTemplate(ContractModel):
     )
     supported_engines: List[Literal["vega-lite", "echarts"]] = Field(
         description="模板兼容的渲染引擎列表。",
-        min_length=1,
+        json_schema_extra={"minItems": 1},
     )
 
     @model_validator(mode="after")
     def validate_template(self) -> "ChartTemplate":
         """校验模板的基础约束。"""
 
+        if not self.encodings:
+            raise ValueError("模板必须至少包含一个编码通道。")
+        if not self.supported_engines:
+            raise ValueError("supported_engines 至少需要一个渲染引擎。")
         required_channels = [item.channel for item in self.encodings if item.required]
         if len(set(required_channels)) != len(required_channels):
             raise ValueError("模板中的必填编码通道不能重复。")
@@ -130,4 +134,3 @@ class ChartTemplate(ContractModel):
         except TypeError as exc:
             raise ValueError("default_config 必须可 JSON 序列化。") from exc
         return self
-

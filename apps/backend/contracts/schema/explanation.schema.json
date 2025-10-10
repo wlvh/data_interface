@@ -1,0 +1,29 @@
+{
+  "$id": "https://schemas.data-interface.local/contracts/explanation_artifact.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "generated_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "key_points": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "markdown": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "markdown",
+    "key_points",
+    "generated_at"
+  ],
+  "type": "object",
+  "version": "1.0.0"
+}
