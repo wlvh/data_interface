@@ -1,61 +1,99 @@
 {
-  "title": "OutputTable",
+  "$defs": {
+    "TransformLog": {
+      "additionalProperties": false,
+      "description": "变换执行过程中的日志记录。",
+      "properties": {
+        "level": {
+          "description": "日志级别。",
+          "minLength": 1,
+          "title": "Level",
+          "type": "string"
+        },
+        "message": {
+          "description": "日志内容。",
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "UTC 时间的日志时间戳。",
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "message",
+        "timestamp"
+      ],
+      "title": "TransformLog",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
   "description": "数据变换输出的表格快照。",
-  "type": "object",
   "properties": {
     "table_id": {
-      "title": "Table Id",
       "description": "输出表的唯一标识。",
       "minLength": 1,
+      "title": "Table Id",
       "type": "string"
     },
     "source_plan_id": {
-      "title": "Source Plan Id",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
       "description": "产生该表的计划 ID，如无可为空。",
-      "type": "string"
+      "title": "Source Plan Id"
     },
     "row_count": {
-      "title": "Row Count",
       "description": "输出表的总记录数。",
       "minimum": 0,
+      "title": "Row Count",
       "type": "integer"
     },
     "columns": {
-      "title": "Columns",
       "description": "输出表的列名称列表，按顺序排列。",
-      "json_schema_extra": {
-        "minItems": 1
-      },
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "minItems": 1,
+      "title": "Columns",
+      "type": "array"
     },
     "sample_rows": {
-      "title": "Sample Rows",
       "description": "用于展示的样本行集合。",
-      "type": "array",
       "items": {
-        "type": "object",
         "additionalProperties": {
-          "type": "string",
-          "maxLength": 50
-        }
-      }
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "maxItems": 50,
+      "title": "Sample Rows",
+      "type": "array"
     },
     "generated_at": {
-      "title": "Generated At",
       "description": "表格生成时间（UTC）。",
-      "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
     },
     "logs": {
-      "title": "Logs",
       "description": "执行过程中的日志集合。",
-      "type": "array",
       "items": {
-        "$ref": "#/definitions/TransformLog"
-      }
+        "$ref": "#/$defs/TransformLog"
+      },
+      "title": "Logs",
+      "type": "array"
     }
   },
   "required": [
@@ -64,40 +102,8 @@
     "columns",
     "generated_at"
   ],
-  "additionalProperties": false,
-  "$defs": {
-    "TransformLog": {
-      "title": "TransformLog",
-      "description": "变换执行过程中的日志记录。",
-      "type": "object",
-      "properties": {
-        "level": {
-          "title": "Level",
-          "description": "日志级别。",
-          "minLength": 1,
-          "type": "string"
-        },
-        "message": {
-          "title": "Message",
-          "description": "日志内容。",
-          "minLength": 1,
-          "type": "string"
-        },
-        "timestamp": {
-          "title": "Timestamp",
-          "description": "UTC 时间的日志时间戳。",
-          "type": "string",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "level",
-        "message",
-        "timestamp"
-      ],
-      "additionalProperties": false
-    }
-  },
+  "title": "OutputTable",
+  "type": "object",
   "$id": "https://schemas.data-interface.local/contracts/output_table.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": "1.0.0"

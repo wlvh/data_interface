@@ -22,6 +22,9 @@ from apps.backend.api.schemas import (
     PlanResponse,
     ScanRequest,
     ScanResponse,
+    TaskFailurePayload,
+    TaskResultPayload,
+    TaskResultResponse,
     TraceReplayRequest,
     TraceReplayResponse,
     TaskSubmitRequest,
@@ -184,6 +187,65 @@ async def submit_task(
     )
     await task_runner.submit_task(config=config)
     return TaskSubmitResponse(task_id=task_id)
+
+
+@router.get("/api/task/{task_id}/result", response_model=TaskResultResponse)
+def fetch_task_result(
+    task_id: str,
+    task_runner: TaskRunner = Depends(get_task_runner),
+) -> TaskResultResponse:
+    """获取任务执行状态与结果。"""
+
+    try:
+        snapshot = task_runner.get_snapshot(task_id=task_id)
+    except KeyError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+    if snapshot.status == "completed":
+        outcome = snapshot.outcome
+        if outcome is None:
+            message = "任务已完成但缺少结果。"
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=message)
+        result_payload = TaskResultPayload(
+            profile=outcome.profile,
+            plan=outcome.plan,
+            table=outcome.table,
+            chart=outcome.chart,
+            explanation=outcome.explanation,
+            trace=outcome.trace,
+        )
+        response = TaskResultResponse(
+            task_id=task_id,
+            status="completed",
+            result=result_payload,
+            failure=None,
+        )
+        return response
+
+    if snapshot.status == "failed":
+        failure = snapshot.failure
+        if failure is None:
+            message = "任务失败但缺少错误信息。"
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=message)
+        failure_payload = TaskFailurePayload(
+            error_type=failure.error_type,
+            error_message=failure.error_message,
+        )
+        response = TaskResultResponse(
+            task_id=task_id,
+            status="failed",
+            result=None,
+            failure=failure_payload,
+        )
+        return response
+
+    response = TaskResultResponse(
+        task_id=task_id,
+        status=snapshot.status,
+        result=None,
+        failure=None,
+    )
+    return response
 
 
 @router.get("/api/task/stream")

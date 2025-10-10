@@ -1,79 +1,268 @@
 {
-  "title": "Plan",
+  "$defs": {
+    "ChartCandidate": {
+      "additionalProperties": false,
+      "description": "计划中的图表模板候选项。",
+      "properties": {
+        "template_id": {
+          "description": "引用的模板 ID。",
+          "minLength": 1,
+          "title": "Template Id",
+          "type": "string"
+        },
+        "engine": {
+          "description": "渲染引擎类型。",
+          "enum": [
+            "vega-lite",
+            "echarts"
+          ],
+          "title": "Engine",
+          "type": "string"
+        },
+        "confidence": {
+          "description": "推荐置信度，范围 [0, 1]。",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "rationale": {
+          "description": "推荐该模板的理由。",
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "encodings": {
+          "description": "字段到视觉通道的映射集合。",
+          "items": {
+            "$ref": "#/$defs/ChartChannelMapping"
+          },
+          "minItems": 1,
+          "title": "Encodings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "template_id",
+        "engine",
+        "confidence",
+        "rationale",
+        "encodings"
+      ],
+      "title": "ChartCandidate",
+      "type": "object"
+    },
+    "ChartChannelMapping": {
+      "additionalProperties": false,
+      "description": "模板编码映射，描述字段如何绑定到视觉通道。",
+      "properties": {
+        "channel": {
+          "description": "视觉通道名称，例如 x、y、color。",
+          "minLength": 1,
+          "title": "Channel",
+          "type": "string"
+        },
+        "field_name": {
+          "description": "绑定到该通道的字段。",
+          "minLength": 1,
+          "title": "Field Name",
+          "type": "string"
+        },
+        "aggregation": {
+          "description": "字段在该通道的聚合方式。",
+          "enum": [
+            "none",
+            "sum",
+            "avg",
+            "count"
+          ],
+          "title": "Aggregation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel",
+        "field_name",
+        "aggregation"
+      ],
+      "title": "ChartChannelMapping",
+      "type": "object"
+    },
+    "ExplanationOutline": {
+      "additionalProperties": false,
+      "description": "解释 Agent 的提纲，用于指导 Markdown 产出。",
+      "properties": {
+        "bullets": {
+          "description": "建议解释内容的要点列表。",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Bullets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "bullets"
+      ],
+      "title": "ExplanationOutline",
+      "type": "object"
+    },
+    "FieldRecommendation": {
+      "additionalProperties": false,
+      "description": "字段推荐结果，明确字段角色与推荐理由。",
+      "properties": {
+        "field_name": {
+          "description": "被推荐的字段名称。",
+          "minLength": 1,
+          "title": "Field Name",
+          "type": "string"
+        },
+        "semantic_role": {
+          "description": "推荐的语义角色。",
+          "enum": [
+            "dimension",
+            "measure",
+            "temporal",
+            "identifier"
+          ],
+          "title": "Semantic Role",
+          "type": "string"
+        },
+        "priority": {
+          "description": "推荐排序优先级，数值越小优先级越高。",
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "reason": {
+          "description": "推荐该字段的原因描述。",
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field_name",
+        "semantic_role",
+        "priority",
+        "reason"
+      ],
+      "title": "FieldRecommendation",
+      "type": "object"
+    },
+    "TransformDraft": {
+      "additionalProperties": false,
+      "description": "计划中的数据变换草案。",
+      "properties": {
+        "transform_id": {
+          "description": "变换草案唯一标识。",
+          "format": "uuid",
+          "title": "Transform Id",
+          "type": "string"
+        },
+        "language": {
+          "description": "变换草案使用的语言。",
+          "enum": [
+            "python",
+            "sql"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "code": {
+          "description": "可执行的代码片段。",
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "output_table": {
+          "description": "预期输出表的标识。",
+          "minLength": 1,
+          "title": "Output Table",
+          "type": "string"
+        },
+        "intent_summary": {
+          "description": "代码对应的业务意图说明。",
+          "minLength": 1,
+          "title": "Intent Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "transform_id",
+        "language",
+        "code",
+        "output_table",
+        "intent_summary"
+      ],
+      "title": "TransformDraft",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
   "description": "统一的计划契约，连接意图与图表交付。",
-  "type": "object",
   "properties": {
     "plan_id": {
-      "title": "Plan Id",
       "description": "计划唯一标识。",
-      "type": "string",
-      "format": "uuid"
+      "format": "uuid",
+      "title": "Plan Id",
+      "type": "string"
     },
     "task_id": {
-      "title": "Task Id",
       "description": "所属任务 ID。",
       "minLength": 1,
+      "title": "Task Id",
       "type": "string"
     },
     "dataset_id": {
-      "title": "Dataset Id",
       "description": "计划关联的数据集 ID。",
       "minLength": 1,
+      "title": "Dataset Id",
       "type": "string"
     },
     "refined_goal": {
-      "title": "Refined Goal",
       "description": "模型澄清后的目标描述。",
       "minLength": 1,
+      "title": "Refined Goal",
       "type": "string"
     },
     "generated_at": {
-      "title": "Generated At",
       "description": "计划生成时间（UTC）。",
-      "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
     },
     "field_recommendations": {
-      "title": "Field Recommendations",
       "description": "推荐使用的字段集合。",
-      "json_schema_extra": {
-        "minItems": 1
-      },
-      "type": "array",
       "items": {
-        "$ref": "#/definitions/FieldRecommendation"
-      }
+        "$ref": "#/$defs/FieldRecommendation"
+      },
+      "minItems": 1,
+      "title": "Field Recommendations",
+      "type": "array"
     },
     "chart_candidates": {
-      "title": "Chart Candidates",
       "description": "图表模板候选集合。",
-      "json_schema_extra": {
-        "minItems": 1
-      },
-      "type": "array",
       "items": {
-        "$ref": "#/definitions/ChartCandidate"
-      }
+        "$ref": "#/$defs/ChartCandidate"
+      },
+      "minItems": 1,
+      "title": "Chart Candidates",
+      "type": "array"
     },
     "transform_drafts": {
-      "title": "Transform Drafts",
       "description": "需要执行的数据变换草案列表。",
-      "json_schema_extra": {
-        "minItems": 1
-      },
-      "type": "array",
       "items": {
-        "$ref": "#/definitions/TransformDraft"
-      }
+        "$ref": "#/$defs/TransformDraft"
+      },
+      "minItems": 1,
+      "title": "Transform Drafts",
+      "type": "array"
     },
     "explanation_outline": {
-      "title": "Explanation Outline",
-      "description": "解释 Agent 参考的提纲。",
-      "allOf": [
-        {
-          "$ref": "#/definitions/ExplanationOutline"
-        }
-      ]
+      "$ref": "#/$defs/ExplanationOutline",
+      "description": "解释 Agent 参考的提纲。"
     }
   },
   "required": [
@@ -87,212 +276,8 @@
     "transform_drafts",
     "explanation_outline"
   ],
-  "additionalProperties": false,
-  "$defs": {
-    "FieldRecommendation": {
-      "title": "FieldRecommendation",
-      "description": "字段推荐结果，明确字段角色与推荐理由。",
-      "type": "object",
-      "properties": {
-        "field_name": {
-          "title": "Field Name",
-          "description": "被推荐的字段名称。",
-          "minLength": 1,
-          "type": "string"
-        },
-        "semantic_role": {
-          "title": "Semantic Role",
-          "description": "推荐的语义角色。",
-          "enum": [
-            "dimension",
-            "measure",
-            "temporal",
-            "identifier"
-          ],
-          "type": "string"
-        },
-        "priority": {
-          "title": "Priority",
-          "description": "推荐排序优先级，数值越小优先级越高。",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "reason": {
-          "title": "Reason",
-          "description": "推荐该字段的原因描述。",
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "field_name",
-        "semantic_role",
-        "priority",
-        "reason"
-      ],
-      "additionalProperties": false
-    },
-    "ChartChannelMapping": {
-      "title": "ChartChannelMapping",
-      "description": "模板编码映射，描述字段如何绑定到视觉通道。",
-      "type": "object",
-      "properties": {
-        "channel": {
-          "title": "Channel",
-          "description": "视觉通道名称，例如 x、y、color。",
-          "minLength": 1,
-          "type": "string"
-        },
-        "field_name": {
-          "title": "Field Name",
-          "description": "绑定到该通道的字段。",
-          "minLength": 1,
-          "type": "string"
-        },
-        "aggregation": {
-          "title": "Aggregation",
-          "description": "字段在该通道的聚合方式。",
-          "enum": [
-            "none",
-            "sum",
-            "avg",
-            "count"
-          ],
-          "type": "string"
-        }
-      },
-      "required": [
-        "channel",
-        "field_name",
-        "aggregation"
-      ],
-      "additionalProperties": false
-    },
-    "ChartCandidate": {
-      "title": "ChartCandidate",
-      "description": "计划中的图表模板候选项。",
-      "type": "object",
-      "properties": {
-        "template_id": {
-          "title": "Template Id",
-          "description": "引用的模板 ID。",
-          "minLength": 1,
-          "type": "string"
-        },
-        "engine": {
-          "title": "Engine",
-          "description": "渲染引擎类型。",
-          "enum": [
-            "vega-lite",
-            "echarts"
-          ],
-          "type": "string"
-        },
-        "confidence": {
-          "title": "Confidence",
-          "description": "推荐置信度，范围 [0, 1]。",
-          "minimum": 0.0,
-          "maximum": 1.0,
-          "type": "number"
-        },
-        "rationale": {
-          "title": "Rationale",
-          "description": "推荐该模板的理由。",
-          "minLength": 1,
-          "type": "string"
-        },
-        "encodings": {
-          "title": "Encodings",
-          "description": "字段到视觉通道的映射集合。",
-          "json_schema_extra": {
-            "minItems": 1
-          },
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/ChartChannelMapping"
-          }
-        }
-      },
-      "required": [
-        "template_id",
-        "engine",
-        "confidence",
-        "rationale",
-        "encodings"
-      ],
-      "additionalProperties": false
-    },
-    "TransformDraft": {
-      "title": "TransformDraft",
-      "description": "计划中的数据变换草案。",
-      "type": "object",
-      "properties": {
-        "transform_id": {
-          "title": "Transform Id",
-          "description": "变换草案唯一标识。",
-          "type": "string",
-          "format": "uuid"
-        },
-        "language": {
-          "title": "Language",
-          "description": "变换草案使用的语言。",
-          "enum": [
-            "python",
-            "sql"
-          ],
-          "type": "string"
-        },
-        "code": {
-          "title": "Code",
-          "description": "可执行的代码片段。",
-          "minLength": 1,
-          "type": "string"
-        },
-        "output_table": {
-          "title": "Output Table",
-          "description": "预期输出表的标识。",
-          "minLength": 1,
-          "type": "string"
-        },
-        "intent_summary": {
-          "title": "Intent Summary",
-          "description": "代码对应的业务意图说明。",
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "transform_id",
-        "language",
-        "code",
-        "output_table",
-        "intent_summary"
-      ],
-      "additionalProperties": false
-    },
-    "ExplanationOutline": {
-      "title": "ExplanationOutline",
-      "description": "解释 Agent 的提纲，用于指导 Markdown 产出。",
-      "type": "object",
-      "properties": {
-        "bullets": {
-          "title": "Bullets",
-          "description": "建议解释内容的要点列表。",
-          "json_schema_extra": {
-            "minItems": 1
-          },
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "bullets"
-      ],
-      "additionalProperties": false
-    }
-  },
+  "title": "Plan",
+  "type": "object",
   "$id": "https://schemas.data-interface.local/contracts/plan.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": "1.0.0"

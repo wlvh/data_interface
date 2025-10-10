@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -101,3 +101,36 @@ class TaskSubmitResponse(BaseModel):
     """任务提交响应。"""
 
     task_id: str = Field(description="创建的任务 ID。", min_length=1)
+
+
+class TaskFailurePayload(BaseModel):
+    """任务失败结构化信息。"""
+
+    error_type: str = Field(description="异常类型。", min_length=1)
+    error_message: str = Field(description="异常消息。", min_length=1)
+
+
+class TaskResultPayload(BaseModel):
+    """任务成功结果载荷。"""
+
+    profile: DatasetProfile = Field(description="任务结束时的画像。")
+    plan: Plan = Field(description="最终计划。")
+    table: OutputTable = Field(description="变换产出的数据表。")
+    chart: ChartSpec = Field(description="推荐图表规范。")
+    explanation: ExplanationArtifact = Field(description="解释 Agent 输出。")
+    trace: TraceRecord = Field(description="完整的 Trace 记录。")
+
+
+class TaskResultResponse(BaseModel):
+    """任务状态查询响应。"""
+
+    task_id: str = Field(description="任务标识。", min_length=1)
+    status: Literal["running", "completed", "failed"] = Field(description="当前任务执行状态。")
+    result: Optional[TaskResultPayload] = Field(
+        default=None,
+        description="任务完成后的结构化结果，仅在 status=completed 时存在。",
+    )
+    failure: Optional[TaskFailurePayload] = Field(
+        default=None,
+        description="任务失败信息，仅在 status=failed 时存在。",
+    )

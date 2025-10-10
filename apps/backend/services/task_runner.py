@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from apps.backend.agents import AgentContext
@@ -21,7 +22,26 @@ from apps.backend.stores import DatasetStore, TraceStore
 
 
 def _generate_task_id() -> str:
+    """生成随机 task_id。"""
+
     return f"task_{uuid.uuid4()}"
+
+
+@dataclass(frozen=True)
+class TaskFailure:
+    """任务失败描述信息。"""
+
+    error_type: str
+    error_message: str
+
+
+@dataclass(frozen=True)
+class TaskSnapshot:
+    """任务执行状态快照。"""
+
+    status: str
+    outcome: Optional[PipelineOutcome]
+    failure: Optional[TaskFailure]
 
 
 class TaskRunner:
@@ -43,6 +63,7 @@ class TaskRunner:
         self._subscribers: Dict[str, List[asyncio.Queue]] = {}
         self._status: Dict[str, str] = {}
         self._results: Dict[str, PipelineOutcome] = {}
+        self._failures: Dict[str, TaskFailure] = {}
 
     async def submit_task(self, config: PipelineConfig) -> str:
         """提交任务并立即返回 task_id。"""
@@ -63,6 +84,8 @@ class TaskRunner:
         trace_recorder = TraceRecorder(clock=self._clock)
         self._history[task_id] = []
         self._subscribers[task_id] = []
+        self._results.pop(task_id, None)
+        self._failures.pop(task_id, None)
         self._status[task_id] = "running"
         start_event = {
             "type": "started",
@@ -136,6 +159,7 @@ class TaskRunner:
         self._status[task_id] = "completed"
         self._dataset_store.save(dataset_id=outcome.profile.dataset_id, profile=outcome.profile)
         self._trace_store.save(trace=outcome.trace)
+        self._failures.pop(task_id, None)
         event = {
             "type": "completed",
             "task_id": task_id,
@@ -147,13 +171,53 @@ class TaskRunner:
 
     def _handle_failure(self, task_id: str, error: Exception) -> None:
         self._status[task_id] = "failed"
+        failure = TaskFailure(
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+        )
+        self._failures[task_id] = failure
+        self._results.pop(task_id, None)
         event = {
             "type": "failed",
             "task_id": task_id,
-            "error_type": error.__class__.__name__,
-            "error_message": str(error),
+            "error_type": failure.error_type,
+            "error_message": failure.error_message,
         }
         self._broadcast_event(task_id, event, finished=True)
 
     def latest_result(self, task_id: str) -> Optional[PipelineOutcome]:
+        """返回最新的 PipelineOutcome，若任务未完成则返回 None。"""
+
         return self._results.get(task_id)
+
+    def get_snapshot(self, task_id: str) -> TaskSnapshot:
+        """返回任务执行状态快照。
+
+        Parameters
+        ----------
+        task_id: str
+            需要查询的任务标识。
+
+        Returns
+        -------
+        TaskSnapshot
+            含有任务状态与结果/错误信息的快照。
+        """
+
+        if task_id not in self._history:
+            message = f"task_id={task_id} 不存在。"
+            raise KeyError(message)
+        status = self._status.get(task_id, "running")
+        if status == "completed":
+            outcome = self._results.get(task_id)
+            if outcome is None:
+                message = f"task_id={task_id} 已完成但缺少结果。"
+                raise RuntimeError(message)
+            return TaskSnapshot(status=status, outcome=outcome, failure=None)
+        if status == "failed":
+            failure = self._failures.get(task_id)
+            if failure is None:
+                message = f"task_id={task_id} 标记为失败但缺少错误信息。"
+                raise RuntimeError(message)
+            return TaskSnapshot(status=status, outcome=None, failure=failure)
+        return TaskSnapshot(status=status, outcome=None, failure=None)

@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import pytest
+from fastapi.testclient import TestClient
 
+from apps.backend.api.app import create_app
+from apps.backend.api.dependencies import get_task_runner
 from apps.backend.agents import (
     AgentContext,
     DatasetScannerAgent,
@@ -238,6 +241,20 @@ def _build_agents() -> PipelineAgents:
     )
 
 
+async def _run_task_and_wait(runner: TaskRunner, config: PipelineConfig) -> tuple[str, List[dict]]:
+    """提交任务并消费完所有事件，返回 task_id 与事件列表。"""
+
+    events: List[dict] = []
+    task_id = await runner.submit_task(config=config)
+    queue = await runner.subscribe(task_id=task_id)
+    while True:
+        item = await queue.get()
+        if item is None:
+            break
+        events.append(item)
+    return task_id, events
+
+
 def test_execute_pipeline_returns_outcome(tmp_path: Path) -> None:
     """执行完整流程应返回图表、表格与 trace。"""
 
@@ -299,14 +316,7 @@ def test_task_runner_streams_events(tmp_path: Path) -> None:
             sample_limit=3,
             user_goal="查看门店销售对比",
         )
-        task_id = await runner.submit_task(config=config)
-        queue = await runner.subscribe(task_id=task_id)
-        events = []
-        while True:
-            item = await queue.get()
-            if item is None:
-                break
-            events.append(item)
+        task_id, events = await _run_task_and_wait(runner=runner, config=config)
         event_types = [event["type"] for event in events]
         assert "started" in event_types
         assert "node_completed" in event_types
@@ -315,5 +325,49 @@ def test_task_runner_streams_events(tmp_path: Path) -> None:
         assert trace.task_id == task_id
         profile = dataset_store.require(dataset_id=config.dataset_id)
         assert profile.dataset_id == config.dataset_id
+
+    asyncio.run(_run())
+
+
+def test_task_result_endpoint_returns_snapshot(tmp_path: Path) -> None:
+    """异步任务完成后，API 应返回结构化结果。"""
+
+    async def _run() -> None:
+        dataset_path = tmp_path / "runner_api.csv"
+        trace_dir = tmp_path / "traces_api"
+        _create_sample_dataset(dataset_path)
+        agents = _build_agents()
+        clock = UtcClock()
+        dataset_store = DatasetStore()
+        trace_store = TraceStore(base_path=trace_dir)
+        runner = TaskRunner(
+            dataset_store=dataset_store,
+            trace_store=trace_store,
+            clock=clock,
+            agents=agents,
+        )
+        config = PipelineConfig(
+            task_id="task_api",
+            dataset_id="dataset_api",
+            dataset_name="API Dataset",
+            dataset_version="v1",
+            dataset_path=dataset_path,
+            sample_limit=3,
+            user_goal="分析 API 返回值",
+        )
+        task_id, _ = await _run_task_and_wait(runner=runner, config=config)
+        snapshot = runner.get_snapshot(task_id=task_id)
+        assert snapshot.status == "completed"
+        assert snapshot.outcome is not None
+        app = create_app()
+        app.dependency_overrides[get_task_runner] = lambda: runner
+        client = TestClient(app)
+        response = client.get(f"/api/task/{task_id}/result")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "completed"
+        assert payload["result"]["plan"]["dataset_id"] == config.dataset_id
+        assert payload["result"]["trace"]["task_id"] == task_id
+        app.dependency_overrides.clear()
 
     asyncio.run(_run())

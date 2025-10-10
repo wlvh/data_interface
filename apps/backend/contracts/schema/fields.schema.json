@@ -1,29 +1,163 @@
 {
-  "title": "FieldSchema",
+  "$defs": {
+    "FieldStatistics": {
+      "additionalProperties": false,
+      "description": "字段的基础统计指标。\n\n该模型聚焦于用于可视化和质量监控的核心指标，不参与任何隐式推断。\n缺失率与唯一值计数均需通过数据扫描流程显式计算并写入。所有比率\n均在 ``[0, 1]`` 范围内，使用浮点数并保留中间精度。",
+      "properties": {
+        "total_count": {
+          "description": "扫描窗口内的记录总数，要求为非负整数。",
+          "minimum": 0,
+          "title": "Total Count",
+          "type": "integer"
+        },
+        "missing_count": {
+          "description": "缺失值数量，必须小于等于 total_count。",
+          "minimum": 0,
+          "title": "Missing Count",
+          "type": "integer"
+        },
+        "distinct_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "唯一值数量，适用于类别或标识字段。",
+          "title": "Distinct Count"
+        },
+        "missing_ratio": {
+          "description": "缺失率，范围为 [0, 1]。",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Missing Ratio",
+          "type": "number"
+        },
+        "entropy": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "离散字段的信息熵，用于辅助排序和推荐。",
+          "title": "Entropy"
+        }
+      },
+      "required": [
+        "total_count",
+        "missing_count",
+        "missing_ratio"
+      ],
+      "title": "FieldStatistics",
+      "type": "object"
+    },
+    "ValueRange": {
+      "additionalProperties": false,
+      "description": "字段的值域信息。\n\n该模型既服务于数值字段，也服务于分类型字段，用以约束可视化和\n质量检测阶段的边界条件。对于数值字段，使用 ``minimum`` 与 ``maximum``\n描述上下界；对于类别字段，则通过 ``categories`` 与 ``top_k_frequencies``\n列出受控的取值集合及其频次。所有取值均应基于 UTC 时间窗口内计算。",
+      "properties": {
+        "minimum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "字段在扫描窗口内的最小值，仅适用于数值字段。",
+          "title": "Minimum"
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "字段在扫描窗口内的最大值，仅适用于数值字段。",
+          "title": "Maximum"
+        },
+        "categories": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "按频次降序排列的类别取值列表，仅适用于类别字段。",
+          "title": "Categories"
+        },
+        "top_k_frequencies": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "与 categories 对应的频次列表，用于前端显示 Top-K。",
+          "title": "Top K Frequencies"
+        }
+      },
+      "title": "ValueRange",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
   "description": "字段契约描述。\n\n每个字段契约都需要明确数据类型、语义角色以及可视化所需的补充信息。\n该模型既被数据扫描服务使用，也被图表模板、规划与执行模块共用。",
-  "type": "object",
   "properties": {
     "name": {
-      "title": "Name",
       "description": "字段的原始名称。",
       "minLength": 1,
+      "title": "Name",
       "type": "string"
     },
     "path": {
-      "title": "Path",
       "description": "字段在嵌套结构中的访问路径，按层级排列。",
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "title": "Path",
+      "type": "array"
     },
     "title": {
-      "title": "Title",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
       "description": "面向用户展示的字段标题，可选。",
-      "type": "string"
+      "title": "Title"
     },
     "data_type": {
-      "title": "Data Type",
       "description": "字段的基础数据类型。",
       "enum": [
         "integer",
@@ -32,10 +166,10 @@
         "string",
         "datetime"
       ],
+      "title": "Data Type",
       "type": "string"
     },
     "semantic_type": {
-      "title": "Semantic Type",
       "description": "字段的语义类型，用于图表推荐与校验。",
       "enum": [
         "dimension",
@@ -45,58 +179,72 @@
         "geo",
         "unknown"
       ],
+      "title": "Semantic Type",
       "type": "string"
     },
     "nullable": {
-      "title": "Nullable",
       "description": "字段是否允许缺失值。",
+      "title": "Nullable",
       "type": "boolean"
     },
     "unit": {
-      "title": "Unit",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
       "description": "字段的度量单位，例如 USD、% 等。",
-      "type": "string"
+      "title": "Unit"
     },
     "description": {
-      "title": "Description",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
       "description": "字段的业务描述，用于提示与文档。",
-      "type": "string"
+      "title": "Description"
     },
     "tags": {
-      "title": "Tags",
       "description": "与字段相关的标签集合，可用于检索。",
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "title": "Tags",
+      "type": "array"
     },
     "sample_values": {
-      "title": "Sample Values",
       "description": "可展示给用户的示例取值列表，按字符串形式存储。",
-      "maxLength": 20,
-      "type": "array",
       "items": {
-        "type": "string",
-        "maxLength": 20
-      }
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Sample Values",
+      "type": "array"
     },
     "value_range": {
-      "title": "Value Range",
-      "description": "字段的值域信息。",
-      "allOf": [
+      "anyOf": [
         {
-          "$ref": "#/definitions/ValueRange"
+          "$ref": "#/$defs/ValueRange"
+        },
+        {
+          "type": "null"
         }
-      ]
+      ],
+      "default": null,
+      "description": "字段的值域信息。"
     },
     "statistics": {
-      "title": "Statistics",
-      "description": "字段的统计信息，用于质量与推荐。",
-      "allOf": [
-        {
-          "$ref": "#/definitions/FieldStatistics"
-        }
-      ]
+      "$ref": "#/$defs/FieldStatistics",
+      "description": "字段的统计信息，用于质量与推荐。"
     }
   },
   "required": [
@@ -106,87 +254,8 @@
     "nullable",
     "statistics"
   ],
-  "additionalProperties": false,
-  "$defs": {
-    "ValueRange": {
-      "title": "ValueRange",
-      "description": "字段的值域信息。\n\n该模型既服务于数值字段，也服务于分类型字段，用以约束可视化和\n质量检测阶段的边界条件。对于数值字段，使用 ``minimum`` 与 ``maximum``\n描述上下界；对于类别字段，则通过 ``categories`` 与 ``top_k_frequencies``\n列出受控的取值集合及其频次。所有取值均应基于 UTC 时间窗口内计算。",
-      "type": "object",
-      "properties": {
-        "minimum": {
-          "title": "Minimum",
-          "description": "字段在扫描窗口内的最小值，仅适用于数值字段。",
-          "type": "number"
-        },
-        "maximum": {
-          "title": "Maximum",
-          "description": "字段在扫描窗口内的最大值，仅适用于数值字段。",
-          "type": "number"
-        },
-        "categories": {
-          "title": "Categories",
-          "description": "按频次降序排列的类别取值列表，仅适用于类别字段。",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "top_k_frequencies": {
-          "title": "Top K Frequencies",
-          "description": "与 categories 对应的频次列表，用于前端显示 Top-K。",
-          "type": "array",
-          "items": {
-            "type": "integer"
-          }
-        }
-      },
-      "additionalProperties": false
-    },
-    "FieldStatistics": {
-      "title": "FieldStatistics",
-      "description": "字段的基础统计指标。\n\n该模型聚焦于用于可视化和质量监控的核心指标，不参与任何隐式推断。\n缺失率与唯一值计数均需通过数据扫描流程显式计算并写入。所有比率\n均在 ``[0, 1]`` 范围内，使用浮点数并保留中间精度。",
-      "type": "object",
-      "properties": {
-        "total_count": {
-          "title": "Total Count",
-          "description": "扫描窗口内的记录总数，要求为非负整数。",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "missing_count": {
-          "title": "Missing Count",
-          "description": "缺失值数量，必须小于等于 total_count。",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "distinct_count": {
-          "title": "Distinct Count",
-          "description": "唯一值数量，适用于类别或标识字段。",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "missing_ratio": {
-          "title": "Missing Ratio",
-          "description": "缺失率，范围为 [0, 1]。",
-          "minimum": 0.0,
-          "maximum": 1.0,
-          "type": "number"
-        },
-        "entropy": {
-          "title": "Entropy",
-          "description": "离散字段的信息熵，用于辅助排序和推荐。",
-          "minimum": 0.0,
-          "type": "number"
-        }
-      },
-      "required": [
-        "total_count",
-        "missing_count",
-        "missing_ratio"
-      ],
-      "additionalProperties": false
-    }
-  },
+  "title": "FieldSchema",
+  "type": "object",
   "$id": "https://schemas.data-interface.local/contracts/field_schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": "1.0.0"
