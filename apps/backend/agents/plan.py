@@ -73,7 +73,7 @@ class PlanRefinementAgent(Agent):
             operation="plan.refine",
             agent_name=self.name,
             slo=self.slo,
-            parent_span_id=None,
+            parent_span_id=context.parent_span_id,
             model_name="gpt-5",
             prompt_version="v1",
         )
@@ -225,6 +225,10 @@ class PlanRefinementAgent(Agent):
             status="success",
             failure_category=None,
             failure_isolation_ratio=1.0,
+            status_detail={
+                "chart_candidates": len(chart_plan_items),
+                "field_plan": len(sorted_recommendations),
+            },
         )
         LOGGER.info(
             "计划细化完成",

@@ -201,8 +201,7 @@ class TaskRunner:
         self._dataset_store.save(dataset_id=outcome.profile.dataset_id, profile=outcome.profile)
         self._trace_store.save(trace=outcome.trace)
         self._failures.pop(task_id, None)
-        self._trace_recorders.pop(task_id, None)
-        self._event_sequence.pop(task_id, None)
+        root_span_id = outcome.trace.spans[0].span_id if outcome.trace.spans else None
         self._broadcast_event(
             task_id,
             event_type="completed",
@@ -212,8 +211,11 @@ class TaskRunner:
                 "chart_id": outcome.chart.chart_id,
                 "rows_out": outcome.output_table.metrics.rows_out,
             },
+            span_id=root_span_id,
             finished=True,
         )
+        self._trace_recorders.pop(task_id, None)
+        self._event_sequence.pop(task_id, None)
 
     def _handle_failure(self, task_id: str, error: Exception) -> None:
         self._status[task_id] = "failed"
@@ -223,8 +225,10 @@ class TaskRunner:
         )
         self._failures[task_id] = failure
         self._results.pop(task_id, None)
-        self._trace_recorders.pop(task_id, None)
-        self._event_sequence.pop(task_id, None)
+        trace_recorder = self._trace_recorders.get(task_id)
+        root_span_id = None
+        if trace_recorder is not None:
+            root_span_id = trace_recorder.get_root_span_id()
         self._broadcast_event(
             task_id,
             event_type="failed",
@@ -233,8 +237,11 @@ class TaskRunner:
                 "error_type": failure.error_type,
                 "error_message": failure.error_message,
             },
+            span_id=root_span_id,
             finished=True,
         )
+        self._trace_recorders.pop(task_id, None)
+        self._event_sequence.pop(task_id, None)
 
     def latest_result(self, task_id: str) -> Optional[PipelineOutcome]:
         """返回最新的 PipelineOutcome，若任务未完成则返回 None。"""

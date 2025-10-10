@@ -54,7 +54,7 @@ class ExplanationAgent(Agent):
             operation="explain.summarize",
             agent_name=self.name,
             slo=self.slo,
-            parent_span_id=None,
+            parent_span_id=context.parent_span_id,
             model_name="gpt-4o-mini",
             prompt_version="v1",
         )
@@ -84,6 +84,9 @@ class ExplanationAgent(Agent):
             status="success",
             failure_category=None,
             failure_isolation_ratio=1.0,
+            status_detail={
+                "points": len(bullet_lines),
+            },
         )
         LOGGER.info(
             "解释生成完成",
