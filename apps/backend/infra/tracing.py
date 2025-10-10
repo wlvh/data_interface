@@ -8,7 +8,8 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from uuid import uuid4
 
-from apps.backend.contracts.trace import SpanMetrics, SpanSLO, TraceRecord, TraceSpan
+from apps.backend.contracts.metadata import SCHEMA_VERSION
+from apps.backend.contracts.trace import SpanEvent, SpanMetrics, SpanSLO, TraceRecord, TraceSpan
 from apps.backend.infra.clock import UtcClock
 
 LOGGER = logging.getLogger(__name__)
@@ -20,15 +21,22 @@ class _SpanRuntime:
 
     span_id: str
     parent_span_id: Optional[str]
-    node_name: str
+    operation: str
     agent_name: str
     slo: SpanSLO
     model_name: Optional[str]
     prompt_version: Optional[str]
     started_at: datetime
     retry_count: int = 0
-    failure_category: Optional[str] = None
-    failure_isolation_ratio: float = 1.0
+    dataset_hash: Optional[str] = None
+    schema_version: str = SCHEMA_VERSION
+    abort_reason: Optional[str] = None
+    error_class: Optional[str] = None
+    fallback_path: Optional[str] = None
+    sse_seq: Optional[int] = None
+    rows_in: Optional[int] = None
+    rows_out: Optional[int] = None
+    events: List[SpanEvent] = field(default_factory=list)
 
 
 class TraceRecorder:
@@ -51,7 +59,7 @@ class TraceRecorder:
 
     def start_span(
         self,
-        node_name: str,
+        operation: str,
         agent_name: str,
         slo: SpanSLO,
         parent_span_id: Optional[str],
@@ -62,8 +70,8 @@ class TraceRecorder:
 
         Parameters
         ----------
-        node_name: str
-            状态图节点名称。
+        operation: str
+            状态图节点名称，遵循 `范畴.动作` 的命名规范。
         agent_name: str
             执行节点的 Agent 名称。
         slo: SpanSLO
@@ -86,17 +94,73 @@ class TraceRecorder:
         runtime = _SpanRuntime(
             span_id=span_id,
             parent_span_id=parent_span_id,
-            node_name=node_name,
+            operation=operation,
             agent_name=agent_name,
             slo=slo,
             model_name=model_name,
             prompt_version=prompt_version,
             started_at=started_at,
         )
+        runtime.events.append(
+            SpanEvent(event_type="start", timestamp=started_at, detail=None),
+        )
         self._spans.append(runtime)
         self._span_index[span_id] = runtime
-        LOGGER.debug("Span started", extra={"span_id": span_id, "node": node_name})
+        LOGGER.debug("Span started", extra={"span_id": span_id, "operation": operation})
         return span_id
+
+    def update_span(
+        self,
+        span_id: str,
+        *,
+        rows_in: Optional[int] = None,
+        rows_out: Optional[int] = None,
+        dataset_hash: Optional[str] = None,
+        schema_version: Optional[str] = None,
+        fallback_path: Optional[str] = None,
+        abort_reason: Optional[str] = None,
+        sse_seq: Optional[int] = None,
+    ) -> None:
+        """更新运行期 Span 元信息。
+
+        Parameters
+        ----------
+        span_id: str
+            需要更新的 Span 标识。
+        rows_in: Optional[int]
+            节点输入行数。
+        rows_out: Optional[int]
+            节点输出行数。
+        dataset_hash: Optional[str]
+            数据来源哈希，用于回放一致性。
+        schema_version: Optional[str]
+            运行时契约版本。
+        fallback_path: Optional[str]
+            若发生降级，记录采用的路径。
+        abort_reason: Optional[str]
+            若节点提前终止，记录原因。
+        sse_seq: Optional[int]
+            SSE 推送序号。
+        """
+
+        if span_id not in self._span_index:
+            message = f"span_id={span_id} 不存在，无法更新。"
+            raise KeyError(message)
+        runtime = self._span_index[span_id]
+        if rows_in is not None:
+            runtime.rows_in = rows_in
+        if rows_out is not None:
+            runtime.rows_out = rows_out
+        if dataset_hash is not None:
+            runtime.dataset_hash = dataset_hash
+        if schema_version is not None:
+            runtime.schema_version = schema_version
+        if fallback_path is not None:
+            runtime.fallback_path = fallback_path
+        if abort_reason is not None:
+            runtime.abort_reason = abort_reason
+        if sse_seq is not None:
+            runtime.sse_seq = sse_seq
 
     def register_retry(self, span_id: str) -> None:
         """为指定 Span 累加一次重试数量。
@@ -112,6 +176,9 @@ class TraceRecorder:
             raise KeyError(message)
         runtime = self._span_index[span_id]
         runtime.retry_count += 1
+        runtime.events.append(
+            SpanEvent(event_type="retry", timestamp=self._clock.now(), detail=None),
+        )
         LOGGER.info(
             "Span retry recorded",
             extra={
@@ -146,8 +213,8 @@ class TraceRecorder:
             可用于序列化的 Span 契约对象。
         """
 
-        if status not in {"success", "failed"}:
-            message = f"status={status} 非法，仅支持 success 或 failed。"
+        if status not in {"success", "failed", "aborted"}:
+            message = f"status={status} 非法，仅支持 success/failed/aborted。"
             raise ValueError(message)
         if span_id not in self._span_index:
             message = f"span_id={span_id} 不存在，无法结束。"
@@ -158,21 +225,37 @@ class TraceRecorder:
         metrics = SpanMetrics(
             duration_ms=duration_ms,
             retry_count=runtime.retry_count,
-            failure_category=failure_category,
-            failure_isolation_ratio=failure_isolation_ratio,
+            rows_in=runtime.rows_in,
+            rows_out=runtime.rows_out,
+        )
+        event_type = "success"
+        event_detail: Optional[str] = None
+        if status in {"failed", "aborted"}:
+            runtime.error_class = failure_category
+            event_type = "abort"
+            event_detail = failure_category or ""
+            runtime.abort_reason = failure_category or runtime.abort_reason
+        runtime.events.append(
+            SpanEvent(event_type=event_type, timestamp=completed_at, detail=event_detail),
         )
         trace_span = TraceSpan(
             span_id=runtime.span_id,
             parent_span_id=runtime.parent_span_id,
-            node_name=runtime.node_name,
+            operation=runtime.operation,
             agent_name=runtime.agent_name,
             status=status,
             started_at=runtime.started_at,
-            completed_at=completed_at,
-            metrics=metrics,
             slo=runtime.slo,
+            metrics=metrics,
             model_name=runtime.model_name,
             prompt_version=runtime.prompt_version,
+            dataset_hash=runtime.dataset_hash,
+            schema_version=runtime.schema_version,
+            abort_reason=runtime.abort_reason,
+            error_class=runtime.error_class,
+            fallback_path=runtime.fallback_path,
+            sse_seq=runtime.sse_seq,
+            events=runtime.events,
         )
         LOGGER.info(
             "Span finished",
@@ -209,6 +292,7 @@ class TraceRecorder:
 
         created_at = self._clock.now()
         trace = TraceRecord(
+            trace_id=str(uuid4()),
             task_id=task_id,
             dataset_id=dataset_id,
             created_at=created_at,

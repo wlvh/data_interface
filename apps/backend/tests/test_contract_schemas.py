@@ -8,14 +8,32 @@ from pathlib import Path
 
 import pytest
 
+from apps.backend.contracts.chart_spec import ChartA11y, ChartLayout, ChartSpec
 from apps.backend.contracts.chart_template import ChartEncoding, ChartTemplate
-from apps.backend.contracts.dataset_profile import DatasetProfile, DatasetSummary
+from apps.backend.contracts.dataset_profile import DatasetProfile, DatasetSampling, DatasetSummary
+from apps.backend.contracts.encoding_patch import EncodingPatch, EncodingPatchOp
 from apps.backend.contracts.explanation import ExplanationArtifact
 from apps.backend.contracts.fields import FieldSchema, FieldStatistics, ValueRange
-from apps.backend.contracts.plan import Plan
-from apps.backend.contracts.chart_spec import ChartSpec
-from apps.backend.contracts.transform import OutputTable, TransformLog
-from apps.backend.contracts.trace import TraceRecord
+from apps.backend.contracts.plan import (
+    ChartChannelMapping,
+    ChartPlanItem,
+    ExplainOutline,
+    FieldPlanItem,
+    Plan,
+    PlanAssumption,
+    TransformDraft,
+)
+from apps.backend.contracts.transform import (
+    OutputMetrics,
+    OutputTable,
+    PreparedTable,
+    PreparedTableLimits,
+    PreparedTableStats,
+    TableColumn,
+    TableSample,
+    TransformLog,
+)
+from apps.backend.contracts.trace import SpanEvent, SpanMetrics, SpanSLO, TraceRecord, TraceSpan
 from pydantic import ValidationError
 
 
@@ -96,6 +114,14 @@ def test_explanation_schema_matches_json() -> None:
     assert generated == stored
 
 
+def test_prepared_table_schema_matches_json() -> None:
+    """确保 PreparedTable 契约的 JSONSchema 与模型保持一致。"""
+
+    generated = _normalize_schema(PreparedTable.model_json_schema())
+    stored = _normalize_schema(_load_schema("prepared_table.json"))
+    assert generated == stored
+
+
 def test_output_table_schema_matches_json() -> None:
     """确保输出表契约的 JSONSchema 与模型保持一致。"""
 
@@ -117,6 +143,14 @@ def test_transform_log_schema_matches_json() -> None:
 
     generated = _normalize_schema(TransformLog.model_json_schema())
     stored = _normalize_schema(_load_schema("transform_log.schema.json"))
+    assert generated == stored
+
+
+def test_encoding_patch_schema_matches_json() -> None:
+    """确保编码补丁契约的 JSONSchema 与模型保持一致。"""
+
+    generated = _normalize_schema(EncodingPatch.model_json_schema())
+    stored = _normalize_schema(_load_schema("encoding_patch.json"))
     assert generated == stored
 
 
@@ -145,6 +179,7 @@ def _build_field_schema() -> FieldSchema:
         sample_values=["132.5", "98.0"],
         value_range=value_range,
         statistics=statistics,
+        temporal_granularity_candidates=[],
     )
 
 
@@ -166,6 +201,7 @@ def test_field_schema_invalid_semantic_type() -> None:
             nullable=False,
             sample_values=["超过", "限制", "示例", "过多"],
             statistics=statistics,
+            temporal_granularity_candidates=[],
         )
 
 
@@ -178,7 +214,7 @@ def test_dataset_profile_consistency_checks() -> None:
         dataset_version="v1",
         generated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         row_count=50,
-        field_count=1,
+        sampling=DatasetSampling(strategy="head", size=5, seed=0),
         fields=[field_schema],
         sample_rows=[{"weekly_sales": "100"}],
     )
@@ -190,7 +226,6 @@ def test_dataset_profile_consistency_checks() -> None:
             created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
             profiled_at=datetime(2023, 12, 31, tzinfo=timezone.utc),
             row_count=40,
-            field_count=2,
             hash_digest="abcdef12",
             summary=summary,
         )
@@ -212,6 +247,7 @@ def test_dataset_summary_rejects_naive_datetime() -> None:
         semantic_type="temporal",
         nullable=False,
         statistics=statistics,
+        temporal_granularity_candidates=["day"],
     )
     with pytest.raises(ValidationError):
         DatasetSummary(
@@ -219,7 +255,7 @@ def test_dataset_summary_rejects_naive_datetime() -> None:
             dataset_version="v1",
             generated_at=datetime(2024, 1, 1),
             row_count=1,
-            field_count=1,
+            sampling=DatasetSampling(strategy="head", size=5, seed=0),
             fields=[field_schema],
         )
 
@@ -244,7 +280,7 @@ def test_dataset_profile_requires_utc() -> None:
         dataset_version="v1",
         generated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         row_count=50,
-        field_count=1,
+        sampling=DatasetSampling(strategy="head", size=5, seed=0),
         fields=[field_schema],
     )
     with pytest.raises(ValidationError):
@@ -255,7 +291,6 @@ def test_dataset_profile_requires_utc() -> None:
             created_at=datetime(2024, 1, 1),
             profiled_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
             row_count=100,
-            field_count=1,
             hash_digest="abcdef12",
             summary=summary,
         )
@@ -337,7 +372,7 @@ def test_dataset_profile_success() -> None:
         dataset_version="v1",
         generated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
         row_count=50,
-        field_count=1,
+        sampling=DatasetSampling(strategy="head", size=5, seed=0),
         fields=[field_schema],
         sample_rows=[{"weekly_sales": "100"}],
         warnings=["缺失值较高"],
@@ -349,7 +384,6 @@ def test_dataset_profile_success() -> None:
         created_at=datetime(2023, 12, 31, tzinfo=timezone.utc),
         profiled_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
         row_count=100,
-        field_count=1,
         hash_digest="abcdef12",
         summary=summary,
         profiling_notes=["扫描成功"],

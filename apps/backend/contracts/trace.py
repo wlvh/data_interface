@@ -7,7 +7,7 @@ from typing import List, Literal, Optional
 
 from apps.backend.compat import ConfigDict, Field, model_validator
 
-from apps.backend.contracts.metadata import ContractModel
+from apps.backend.contracts.metadata import VersionedContractModel
 
 
 def _ensure_utc(dt: datetime, field_name: str) -> None:
@@ -21,7 +21,7 @@ def _ensure_utc(dt: datetime, field_name: str) -> None:
         raise ValueError(message)
 
 
-class SpanSLO(ContractModel):
+class SpanSLO(VersionedContractModel):
     """定义单个节点的服务目标。"""
 
     model_config = ConfigDict(extra="forbid")
@@ -45,7 +45,41 @@ class SpanSLO(ContractModel):
     )
 
 
-class SpanMetrics(ContractModel):
+class SpanEvent(VersionedContractModel):
+    """Span 生命周期内的离散事件记录。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @classmethod
+    def schema_name(cls) -> str:
+        """返回 SpanEvent 契约名称。"""
+
+        return "span_event"
+
+    event_type: Literal[
+        "start",
+        "cache_hit",
+        "retry",
+        "abort",
+        "fallback",
+        "emit_partial",
+        "success",
+    ] = Field(description="事件类型。")
+    timestamp: datetime = Field(description="事件发生时间（UTC）。")
+    detail: Optional[str] = Field(
+        default=None,
+        description="事件附带的信息。",
+    )
+
+    @model_validator(mode="after")
+    def ensure_utc(self) -> "SpanEvent":
+        """强制事件时间为 UTC。"""
+
+        _ensure_utc(dt=self.timestamp, field_name="timestamp")
+        return self
+
+
+class SpanMetrics(VersionedContractModel):
     """节点执行的指标快照。"""
 
     model_config = ConfigDict(extra="forbid")
@@ -64,18 +98,19 @@ class SpanMetrics(ContractModel):
         description="节点已经发生的重试次数。",
         ge=0,
     )
-    failure_category: Optional[str] = Field(
+    rows_in: Optional[int] = Field(
         default=None,
-        description="失败原因分类，成功时为空。",
+        description="输入行数，缺失表示未记录。",
+        ge=0,
     )
-    failure_isolation_ratio: float = Field(
-        description="失败隔离比例，范围 [0, 1]。",
-        ge=0.0,
-        le=1.0,
+    rows_out: Optional[int] = Field(
+        default=None,
+        description="输出行数，缺失表示未记录。",
+        ge=0,
     )
 
 
-class TraceSpan(ContractModel):
+class TraceSpan(VersionedContractModel):
     """Trace 树中的单个 Span。"""
 
     model_config = ConfigDict(extra="forbid")
@@ -91,13 +126,15 @@ class TraceSpan(ContractModel):
         default=None,
         description="父 Span 标识，根节点为空。",
     )
-    node_name: str = Field(description="状态图节点名称。", min_length=1)
+    operation: str = Field(
+        description="状态图节点名称，建议遵循动词.名词格式，例如 data.scan。",
+        min_length=1,
+    )
     agent_name: str = Field(description="执行该节点的 Agent 名称。", min_length=1)
-    status: Literal["success", "failed"] = Field(description="节点执行状态。")
+    status: Literal["success", "failed", "aborted"] = Field(description="节点执行状态。")
     started_at: datetime = Field(description="Span 开始时间（UTC）。")
-    completed_at: datetime = Field(description="Span 完成时间（UTC）。")
-    metrics: SpanMetrics = Field(description="节点执行指标。")
     slo: SpanSLO = Field(description="节点目标值。")
+    metrics: SpanMetrics = Field(description="节点执行指标。")
     model_name: Optional[str] = Field(
         default=None,
         description="调用的模型名称，非模型节点为空。",
@@ -106,20 +143,52 @@ class TraceSpan(ContractModel):
         default=None,
         description="提示词版本标识，非模型节点为空。",
     )
+    dataset_hash: Optional[str] = Field(
+        default=None,
+        description="输入数据集的哈希摘要，用于回放一致性校验。",
+    )
+    schema_version: Optional[str] = Field(
+        default=None,
+        description="运行时契约 Schema 版本，便于迁移。",
+    )
+    abort_reason: Optional[str] = Field(
+        default=None,
+        description="若状态为 aborted，则记录终止原因。",
+    )
+    error_class: Optional[str] = Field(
+        default=None,
+        description="失败时的错误分类。",
+    )
+    fallback_path: Optional[str] = Field(
+        default=None,
+        description="触发后备策略时记录所走的分支。",
+    )
+    sse_seq: Optional[int] = Field(
+        default=None,
+        description="若通过 SSE 推送，该 Span 对应的序号。",
+        ge=0,
+    )
+    events: List[SpanEvent] = Field(
+        description="Span 生命周期内发生的事件集合。",
+        default_factory=list,
+    )
 
     @model_validator(mode="after")
     def ensure_temporal_order(self) -> "TraceSpan":
-        """验证时间顺序并强制 UTC。"""
+        """验证时间戳与事件顺序，并强制 UTC。"""
 
         _ensure_utc(dt=self.started_at, field_name="started_at")
-        _ensure_utc(dt=self.completed_at, field_name="completed_at")
-        if self.completed_at < self.started_at:
-            message = "completed_at 不能早于 started_at。"
-            raise ValueError(message)
+        if "." not in self.operation:
+            raise ValueError("operation 需包含语义分段，例如 data.scan。")
+        if self.events:
+            # 确保事件时间不早于开始时间
+            earliest = min(event.timestamp for event in self.events)
+            if earliest < self.started_at:
+                raise ValueError("事件时间不能早于 started_at。")
         return self
 
 
-class TraceRecord(ContractModel):
+class TraceRecord(VersionedContractModel):
     """任务级 Trace 记录。"""
 
     model_config = ConfigDict(extra="forbid")
@@ -130,6 +199,7 @@ class TraceRecord(ContractModel):
 
         return "trace_record"
 
+    trace_id: str = Field(description="Trace 唯一标识。", min_length=1)
     task_id: str = Field(description="任务标识。", min_length=1)
     dataset_id: str = Field(description="关联数据集 ID。", min_length=1)
     created_at: datetime = Field(description="Trace 创建时间（UTC）。")

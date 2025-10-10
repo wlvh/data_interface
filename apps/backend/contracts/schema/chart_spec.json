@@ -1,9 +1,115 @@
 {
   "$defs": {
+    "ChartA11y": {
+      "additionalProperties": false,
+      "description": "无障碍配置，辅助屏幕阅读与结构化解释。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "title": {
+          "description": "图表的可读标题。",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "summary": {
+          "description": "面向屏幕阅读器的结构化总结。",
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "annotations": {
+          "description": "额外的说明或警告列表。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Annotations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "title",
+        "summary"
+      ],
+      "title": "ChartA11y",
+      "type": "object"
+    },
+    "ChartAxis": {
+      "additionalProperties": false,
+      "description": "坐标轴配置，控制刻度、标题与网格。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "channel": {
+          "description": "绑定的视觉通道。",
+          "minLength": 1,
+          "title": "Channel",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "坐标轴标题。",
+          "title": "Title"
+        },
+        "grid": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "是否显示网格线。",
+          "title": "Grid"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "刻度格式，如百分比或日期格式字符串。",
+          "title": "Format"
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "title": "ChartAxis",
+      "type": "object"
+    },
     "ChartChannelMapping": {
       "additionalProperties": false,
       "description": "模板编码映射，描述字段如何绑定到视觉通道。",
       "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
         "channel": {
           "description": "视觉通道名称，例如 x、y、color。",
           "minLength": 1,
@@ -35,11 +141,224 @@
       ],
       "title": "ChartChannelMapping",
       "type": "object"
+    },
+    "ChartLayout": {
+      "additionalProperties": false,
+      "description": "布局配置，约束画布尺寸与主题。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "width": {
+          "description": "画布宽度（像素）。",
+          "minimum": 100,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "description": "画布高度（像素）。",
+          "minimum": 100,
+          "title": "Height",
+          "type": "integer"
+        },
+        "padding": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "周围留白像素数。",
+          "title": "Padding"
+        },
+        "theme": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "主题名称或配色方案。",
+          "title": "Theme"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "title": "ChartLayout",
+      "type": "object"
+    },
+    "ChartLegend": {
+      "additionalProperties": false,
+      "description": "图例配置，确保视觉元素可解读。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "channel": {
+          "description": "关联的视觉通道。",
+          "minLength": 1,
+          "title": "Channel",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "图例标题。",
+          "title": "Title"
+        },
+        "orient": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "图例位置，如 right、bottom。",
+          "title": "Orient"
+        },
+        "show": {
+          "description": "是否展示该图例。",
+          "title": "Show",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "channel",
+        "show"
+      ],
+      "title": "ChartLegend",
+      "type": "object"
+    },
+    "ChartScale": {
+      "additionalProperties": false,
+      "description": "描述单个视觉通道的缩放配置。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "channel": {
+          "description": "对应的视觉通道，例如 x 或 color。",
+          "minLength": 1,
+          "title": "Channel",
+          "type": "string"
+        },
+        "scale_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "缩放类型，例如 linear、point。",
+          "title": "Scale Type"
+        },
+        "domain": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "缩放域，指定值域范围。",
+          "title": "Domain"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "缩放值域映射。",
+          "title": "Range"
+        },
+        "nice": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "是否启用 nice 取整策略。",
+          "title": "Nice"
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "title": "ChartScale",
+      "type": "object"
     }
   },
   "additionalProperties": false,
   "description": "图表最终规范，组合模板与编码映射。",
   "properties": {
+    "x-spec-version": {
+      "default": "2.0.0",
+      "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+      "title": "X-Spec-Version",
+      "type": "string"
+    },
     "chart_id": {
       "description": "图表唯一标识。",
       "minLength": 1,
@@ -58,20 +377,52 @@
       "title": "Engine",
       "type": "string"
     },
-    "encodings": {
-      "description": "字段到视觉通道的映射。",
-      "items": {
-        "$ref": "#/$defs/ChartChannelMapping"
-      },
-      "minItems": 1,
-      "title": "Encodings",
-      "type": "array"
-    },
     "data_source": {
       "description": "绑定的数据表 ID。",
       "minLength": 1,
       "title": "Data Source",
       "type": "string"
+    },
+    "encoding": {
+      "description": "字段到视觉通道的映射。",
+      "items": {
+        "$ref": "#/$defs/ChartChannelMapping"
+      },
+      "minItems": 1,
+      "title": "Encoding",
+      "type": "array"
+    },
+    "scales": {
+      "description": "视觉通道对应的缩放集合。",
+      "items": {
+        "$ref": "#/$defs/ChartScale"
+      },
+      "title": "Scales",
+      "type": "array"
+    },
+    "legends": {
+      "description": "图例配置列表。",
+      "items": {
+        "$ref": "#/$defs/ChartLegend"
+      },
+      "title": "Legends",
+      "type": "array"
+    },
+    "axes": {
+      "description": "坐标轴配置列表。",
+      "items": {
+        "$ref": "#/$defs/ChartAxis"
+      },
+      "title": "Axes",
+      "type": "array"
+    },
+    "layout": {
+      "$ref": "#/$defs/ChartLayout",
+      "description": "图表布局设定。"
+    },
+    "a11y": {
+      "$ref": "#/$defs/ChartA11y",
+      "description": "无障碍相关的说明与提示。"
     },
     "parameters": {
       "additionalProperties": true,
@@ -84,12 +435,14 @@
     "chart_id",
     "template_id",
     "engine",
-    "encodings",
-    "data_source"
+    "data_source",
+    "encoding",
+    "layout",
+    "a11y"
   ],
   "title": "ChartSpec",
   "type": "object",
   "$id": "https://schemas.data-interface.local/contracts/chart_spec.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0"
+  "version": "2.0.0"
 }

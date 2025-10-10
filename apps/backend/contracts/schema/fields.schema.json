@@ -245,6 +245,24 @@
     "statistics": {
       "$ref": "#/$defs/FieldStatistics",
       "description": "字段的统计信息，用于质量与推荐。"
+    },
+    "temporal_granularity_candidates": {
+      "description": "若字段语义为时间，则给出支持的时间粒度候选集合。",
+      "items": {
+        "enum": [
+          "second",
+          "minute",
+          "hour",
+          "day",
+          "week",
+          "month",
+          "quarter",
+          "year"
+        ],
+        "type": "string"
+      },
+      "title": "Temporal Granularity Candidates",
+      "type": "array"
     }
   },
   "required": [
@@ -258,5 +276,5 @@
   "type": "object",
   "$id": "https://schemas.data-interface.local/contracts/field_schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0"
+  "version": "2.0.0"
 }

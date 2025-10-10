@@ -9,10 +9,11 @@ from typing import List
 from apps.backend.agents.base import Agent, AgentContext, AgentOutcome
 from apps.backend.contracts.dataset_profile import DatasetProfile
 from apps.backend.contracts.plan import (
-    ChartCandidate,
+    ChartPlanItem,
     ChartChannelMapping,
-    ExplanationOutline,
-    FieldRecommendation,
+    ExplainOutline,
+    FieldPlanItem,
+    PlanAssumption,
     Plan,
     TransformDraft,
 )
@@ -29,7 +30,7 @@ class PlanPayload:
     user_goal: str
 
 
-def _sort_field_recommendations(recommendations: List[FieldRecommendation]) -> List[FieldRecommendation]:
+def _sort_field_recommendations(recommendations: List[FieldPlanItem]) -> List[FieldPlanItem]:
     """按优先级排序字段推荐。"""
 
     return sorted(recommendations, key=lambda item: item.priority)
@@ -69,7 +70,7 @@ class PlanRefinementAgent(Agent):
             },
         )
         span_id = context.trace_recorder.start_span(
-            node_name="plan",
+            operation="plan.refine",
             agent_name=self.name,
             slo=self.slo,
             parent_span_id=None,
@@ -77,7 +78,7 @@ class PlanRefinementAgent(Agent):
             prompt_version="v1",
         )
         summary = payload.dataset_profile.summary
-        recommendations: List[FieldRecommendation] = []
+        field_plan_items: List[FieldPlanItem] = []
         dimension_field = None
         measure_field = None
         temporal_field = None
@@ -87,13 +88,14 @@ class PlanRefinementAgent(Agent):
             reason = "字段缺失率较低，适合用于分组。"
             if field_schema.statistics.missing_ratio > 0.3:
                 reason = "尽管缺失率较高，但仍可用于探索。"
-            recommendation = FieldRecommendation(
+            recommendation = FieldPlanItem(
                 field_name=field_schema.name,
                 semantic_role=semantic,
                 priority=priority_counter,
-                reason=reason,
+                rationale=reason,
+                operations=[],
             )
-            recommendations.append(recommendation)
+            field_plan_items.append(recommendation)
             if semantic == "dimension" and dimension_field is None:
                 dimension_field = field_schema.name
             if semantic == "measure" and measure_field is None:
@@ -101,8 +103,8 @@ class PlanRefinementAgent(Agent):
             if semantic == "temporal" and temporal_field is None:
                 temporal_field = field_schema.name
             priority_counter += 1
-        sorted_recommendations = _sort_field_recommendations(recommendations=recommendations)
-        chart_candidates: List[ChartCandidate] = []
+        sorted_recommendations = _sort_field_recommendations(recommendations=field_plan_items)
+        chart_plan_items: List[ChartPlanItem] = []
         encodings: List[ChartChannelMapping] = []
         rationale = ""
         template_id = ""
@@ -156,14 +158,15 @@ class PlanRefinementAgent(Agent):
             rationale = "缺少可视化字段，提供统计摘要。"
             encodings = []
             confidence = 0.4
-        chart_candidate = ChartCandidate(
+        chart_candidate = ChartPlanItem(
             template_id=template_id,
             engine=engine,
             confidence=confidence,
             rationale=rationale,
-            encodings=encodings,
+            encoding=encodings,
+            layout_hint=None,
         )
-        chart_candidates.append(chart_candidate)
+        chart_plan_items.append(chart_candidate)
         transform_code_lines: List[str] = []
         transform_code_lines.append("import pandas as pd")
         transform_code_lines.append("")
@@ -192,22 +195,30 @@ class PlanRefinementAgent(Agent):
             output_table="derived_main",
             intent_summary="为推荐图表准备聚合数据。",
         )
-        explanation_outline = ExplanationOutline(
+        explain_outline = ExplainOutline(
             bullets=[
                 "回顾用户目标与澄清后的计划。",
                 "说明推荐字段与图表模板的选择依据。",
                 "列出数据变换草案以及潜在后续操作。",
             ],
         )
+        assumptions = [
+            PlanAssumption(
+                statement="数据集结构与扫描摘要保持一致，字段语义未发生变化。",
+                confidence=0.8,
+                impact="medium",
+            ),
+        ]
         plan = Plan(
             task_id=context.task_id,
             dataset_id=context.dataset_id,
             refined_goal=f"针对 {payload.user_goal} 的分析计划",
             generated_at=context.clock.now(),
-            field_recommendations=sorted_recommendations,
-            chart_candidates=chart_candidates,
+            assumptions=assumptions,
+            field_plan=sorted_recommendations,
+            chart_plan=chart_plan_items,
             transform_drafts=[transform_draft],
-            explanation_outline=explanation_outline,
+            explain_outline=explain_outline,
         )
         trace_span = context.trace_recorder.finish_span(
             span_id=span_id,
@@ -219,7 +230,7 @@ class PlanRefinementAgent(Agent):
             "计划细化完成",
             extra={
                 "task_id": context.task_id,
-                "chart_candidates": len(chart_candidates),
+                "chart_plan": len(chart_plan_items),
             },
         )
         return AgentOutcome(
@@ -227,4 +238,3 @@ class PlanRefinementAgent(Agent):
             span_id=span_id,
             trace_span=trace_span,
         )
-

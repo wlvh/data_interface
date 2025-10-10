@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 
 from apps.backend.agents import AgentContext, ScanPayload
 from apps.backend.api.dependencies import (
+    get_api_recorder,
     get_clock,
     get_dataset_store,
     get_pipeline_agents,
@@ -31,6 +32,7 @@ from apps.backend.api.schemas import (
     TaskSubmitResponse,
 )
 from apps.backend.contracts.trace import TraceRecord
+from apps.backend.infra.persistence import ApiRecorder
 from apps.backend.infra.tracing import TraceRecorder
 from apps.backend.services.pipeline import PipelineConfig, PipelineOutcome, execute_pipeline
 from apps.backend.services.task_runner import TaskRunner
@@ -61,6 +63,7 @@ def trigger_scan(
     dataset_store: DatasetStore = Depends(get_dataset_store),
     trace_store: TraceStore = Depends(get_trace_store),
     clock=Depends(get_clock),
+    api_recorder: ApiRecorder = Depends(get_api_recorder),
 ) -> ScanResponse:
     """触发数据扫描流程。"""
 
@@ -93,6 +96,8 @@ def trigger_scan(
         profile=profile,
         trace=trace,
     )
+    api_recorder.record(endpoint="api_data_scan", direction="request", payload=request)
+    api_recorder.record(endpoint="api_data_scan", direction="response", payload=response)
     return response
 
 
@@ -102,6 +107,7 @@ def refine_plan(
     dataset_store: DatasetStore = Depends(get_dataset_store),
     trace_store: TraceStore = Depends(get_trace_store),
     clock=Depends(get_clock),
+    api_recorder: ApiRecorder = Depends(get_api_recorder),
 ) -> PlanResponse:
     """生成计划、解释与 Trace。"""
 
@@ -134,22 +140,32 @@ def refine_plan(
     response = PlanResponse(
         profile=outcome.profile,
         plan=outcome.plan,
-        table=outcome.table,
+        prepared_table=outcome.prepared_table,
+        output_table=outcome.output_table,
         chart=outcome.chart,
+        encoding_patch=outcome.encoding_patch,
         explanation=outcome.explanation,
         trace=outcome.trace,
     )
+    api_recorder.record(endpoint="api_plan_refine", direction="request", payload=request)
+    api_recorder.record(endpoint="api_plan_refine", direction="response", payload=response)
     return response
 
 
 @router.get("/api/trace/{task_id}", response_model=TraceRecord)
-def get_trace(task_id: str, trace_store: TraceStore = Depends(get_trace_store)) -> TraceRecord:
+def get_trace(
+    task_id: str,
+    trace_store: TraceStore = Depends(get_trace_store),
+    api_recorder: ApiRecorder = Depends(get_api_recorder),
+) -> TraceRecord:
     """根据 task_id 获取 Trace 记录。"""
 
     try:
         trace = trace_store.require(task_id=task_id)
     except KeyError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    api_recorder.record(endpoint="api_trace_get", direction="request", payload={"task_id": task_id})
+    api_recorder.record(endpoint="api_trace_get", direction="response", payload=trace)
     return trace
 
 
@@ -157,6 +173,7 @@ def get_trace(task_id: str, trace_store: TraceStore = Depends(get_trace_store)) 
 def replay_trace(
     request: TraceReplayRequest,
     trace_store: TraceStore = Depends(get_trace_store),
+    api_recorder: ApiRecorder = Depends(get_api_recorder),
 ) -> TraceReplayResponse:
     """回放已存储的 Trace。"""
 
@@ -164,13 +181,17 @@ def replay_trace(
         trace = trace_store.require(task_id=request.task_id)
     except KeyError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-    return TraceReplayResponse(trace=trace)
+    response = TraceReplayResponse(trace=trace)
+    api_recorder.record(endpoint="api_trace_replay", direction="request", payload=request)
+    api_recorder.record(endpoint="api_trace_replay", direction="response", payload=response)
+    return response
 
 
 @router.post("/api/task/submit", response_model=TaskSubmitResponse)
 async def submit_task(
     request: TaskSubmitRequest,
     task_runner: TaskRunner = Depends(get_task_runner),
+    api_recorder: ApiRecorder = Depends(get_api_recorder),
 ) -> TaskSubmitResponse:
     """提交任务并异步执行完整流程。"""
 
@@ -186,13 +207,17 @@ async def submit_task(
         user_goal=request.user_goal,
     )
     await task_runner.submit_task(config=config)
-    return TaskSubmitResponse(task_id=task_id)
+    response = TaskSubmitResponse(task_id=task_id)
+    api_recorder.record(endpoint="api_task_submit", direction="request", payload=request)
+    api_recorder.record(endpoint="api_task_submit", direction="response", payload=response)
+    return response
 
 
 @router.get("/api/task/{task_id}/result", response_model=TaskResultResponse)
 def fetch_task_result(
     task_id: str,
     task_runner: TaskRunner = Depends(get_task_runner),
+    api_recorder: ApiRecorder = Depends(get_api_recorder),
 ) -> TaskResultResponse:
     """获取任务执行状态与结果。"""
 
@@ -209,8 +234,10 @@ def fetch_task_result(
         result_payload = TaskResultPayload(
             profile=outcome.profile,
             plan=outcome.plan,
-            table=outcome.table,
+            prepared_table=outcome.prepared_table,
+            output_table=outcome.output_table,
             chart=outcome.chart,
+            encoding_patch=outcome.encoding_patch,
             explanation=outcome.explanation,
             trace=outcome.trace,
         )
@@ -220,6 +247,8 @@ def fetch_task_result(
             result=result_payload,
             failure=None,
         )
+        api_recorder.record(endpoint="api_task_result", direction="request", payload={"task_id": task_id})
+        api_recorder.record(endpoint="api_task_result", direction="response", payload=response)
         return response
 
     if snapshot.status == "failed":
@@ -237,6 +266,8 @@ def fetch_task_result(
             result=None,
             failure=failure_payload,
         )
+        api_recorder.record(endpoint="api_task_result", direction="request", payload={"task_id": task_id})
+        api_recorder.record(endpoint="api_task_result", direction="response", payload=response)
         return response
 
     response = TaskResultResponse(
@@ -245,6 +276,8 @@ def fetch_task_result(
         result=None,
         failure=None,
     )
+    api_recorder.record(endpoint="api_task_result", direction="request", payload={"task_id": task_id})
+    api_recorder.record(endpoint="api_task_result", direction="response", payload=response)
     return response
 
 
@@ -252,6 +285,7 @@ def fetch_task_result(
 async def stream_task(
     task_id: str,
     task_runner: TaskRunner = Depends(get_task_runner),
+    api_recorder: ApiRecorder = Depends(get_api_recorder),
 ):
     """通过 SSE 返回任务执行进度。"""
 
@@ -269,4 +303,5 @@ async def stream_task(
             payload = json.dumps(item, ensure_ascii=False, default=str)
             yield f"data: {payload}\n\n"
 
+    api_recorder.record(endpoint="api_task_stream", direction="request", payload={"task_id": task_id})
     return StreamingResponse(event_generator(), media_type="text/event-stream")

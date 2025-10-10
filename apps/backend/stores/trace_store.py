@@ -8,14 +8,13 @@ from pathlib import Path
 from typing import Dict
 
 from apps.backend.contracts.trace import TraceRecord
+from apps.backend.compat import model_dump
 
 
 def _model_dump(payload: TraceRecord) -> dict:
     """兼容 pydantic v1/v2 的序列化。"""
 
-    if hasattr(payload, "model_dump"):
-        return payload.model_dump()
-    return payload.dict()
+    return model_dump(payload)
 
 
 def _model_validate(payload: dict) -> TraceRecord:

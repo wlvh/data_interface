@@ -22,7 +22,7 @@ class DoublingAgent:
         """将输入整数乘以 2。"""
 
         span_id = context.trace_recorder.start_span(
-            node_name=self.name,
+            operation=f"{self.name}.execute",
             agent_name=self.name,
             slo=self.slo,
             parent_span_id=None,

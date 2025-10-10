@@ -1,27 +1,32 @@
 {
-  "title": "ExplanationArtifact",
+  "additionalProperties": false,
   "description": "解释 Agent 输出的结构化结果。",
-  "type": "object",
   "properties": {
+    "x-spec-version": {
+      "default": "2.0.0",
+      "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+      "title": "X-Spec-Version",
+      "type": "string"
+    },
     "markdown": {
-      "title": "Markdown",
       "description": "面向用户展示的 Markdown 说明。",
       "minLength": 1,
+      "title": "Markdown",
       "type": "string"
     },
     "key_points": {
-      "title": "Key Points",
       "description": "解释重点摘要列表。",
-      "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "title": "Key Points",
+      "type": "array"
     },
     "generated_at": {
-      "title": "Generated At",
       "description": "生成时间（UTC）。",
-      "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
     }
   },
   "required": [
@@ -29,8 +34,9 @@
     "key_points",
     "generated_at"
   ],
-  "additionalProperties": false,
+  "title": "ExplanationArtifact",
+  "type": "object",
   "$id": "https://schemas.data-interface.local/contracts/explanation_artifact.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "1.0.0"
+  "version": "2.0.0"
 }

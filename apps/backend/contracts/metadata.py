@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Dict
 
-from apps.backend.compat import BaseModel, ConfigDict
+from apps.backend.compat import BaseModel, ConfigDict, Field, model_validator
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,7 @@ class SchemaMetadata:
         }
 
 
-SCHEMA_VERSION: str = "1.0.0"
+SCHEMA_VERSION: str = "2.0.0"
 """契约 Schema 的版本号，作为统一门禁依据。"""
 
 SCHEMA_BASE_URI: str = "https://schemas.data-interface.local/contracts"
@@ -94,7 +94,10 @@ class ContractModel(BaseModel):
     """所有契约模型的基类，统一注入 JSONSchema 元数据。"""
 
     class Config:
+        """Pydantic v1 配置，保持别名与字段名同时可用。"""
+
         extra = "forbid"
+        allow_population_by_field_name = True
 
     @classmethod
     def schema_name(cls) -> str:
@@ -128,3 +131,47 @@ class ContractModel(BaseModel):
             for nested in defs.values():
                 if isinstance(nested, dict):
                     ContractModel._inject_additional_properties(schema=nested)
+
+
+class VersionedContractModel(ContractModel):
+    """带有 `x-spec-version` 元数据的契约模型基类。
+
+    该基类确保所有输出的契约对象都显式声明所依赖的 Schema 版本，便于
+    回放与迁移逻辑在落盘或加载时快速判定兼容性。当输入缺失版本信息时，
+    默认写入当前 `SCHEMA_VERSION`；若提供的版本号不匹配，则交由迁移器
+    处理或直接拒绝，避免静默使用错误结构。
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        protected_namespaces=(),
+    )
+
+    x_spec_version: str = Field(
+        default=SCHEMA_VERSION,
+        alias="x-spec-version",
+        description="契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def inject_version(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        """在缺失版本字段时补充默认值，保持字段与别名兼容。
+
+        Parameters
+        ----------
+        values: Dict[str, Any]
+            输入的原始字段字典，可能缺失 `x-spec-version`。
+
+        Returns
+        -------
+        Dict[str, Any]
+            已包含版本字段的输入字典。
+        """
+
+        if values is None:
+            values = {}
+        if "x-spec-version" not in values and "x_spec_version" not in values:
+            values["x-spec-version"] = SCHEMA_VERSION
+        return values

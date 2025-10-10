@@ -1,8 +1,8 @@
 {
   "$defs": {
-    "OutputMetrics": {
+    "PreparedTableLimits": {
       "additionalProperties": false,
-      "description": "变换执行后的指标数据，用于 SLO 与审计。",
+      "description": "执行前的限制条件，用于保障资源消耗。",
       "properties": {
         "x-spec-version": {
           "default": "2.0.0",
@@ -10,57 +10,101 @@
           "title": "X-Spec-Version",
           "type": "string"
         },
-        "duration_ms": {
-          "description": "执行耗时（毫秒）。",
-          "minimum": 0,
-          "title": "Duration Ms",
-          "type": "integer"
-        },
-        "rows_in": {
-          "description": "输入行数。",
-          "minimum": 0,
-          "title": "Rows In",
-          "type": "integer"
-        },
-        "rows_out": {
-          "description": "输出行数。",
-          "minimum": 0,
-          "title": "Rows Out",
-          "type": "integer"
-        },
-        "retry_count": {
-          "description": "执行过程中触发的重试次数。",
-          "minimum": 0,
-          "title": "Retry Count",
-          "type": "integer"
-        },
-        "row_limit_applied": {
-          "description": "是否命中行数限制。",
-          "title": "Row Limit Applied",
-          "type": "boolean"
-        },
-        "abort_reason": {
+        "row_limit": {
           "anyOf": [
             {
-              "type": "string"
+              "minimum": 1,
+              "type": "integer"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "若执行提前结束或失败，此处记录原因。",
-          "title": "Abort Reason"
+          "description": "单次执行允许处理的最大行数，None 表示无限制。",
+          "title": "Row Limit"
+        },
+        "timeout_ms": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "执行允许的最长耗时（毫秒）。",
+          "title": "Timeout Ms"
+        },
+        "sample_limit": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "采样用于回放的最大行数。",
+          "title": "Sample Limit"
+        }
+      },
+      "title": "PreparedTableLimits",
+      "type": "object"
+    },
+    "PreparedTableStats": {
+      "additionalProperties": false,
+      "description": "变换执行前的统计信息，用于限制与审计。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "row_count": {
+          "description": "输入数据的行数估计。",
+          "minimum": 0,
+          "title": "Row Count",
+          "type": "integer"
+        },
+        "estimated_bytes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "输入数据的估算体积（字节）。",
+          "title": "Estimated Bytes"
+        },
+        "distinct_row_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "唯一行数估计，用于去重评估。",
+          "title": "Distinct Row Count"
         }
       },
       "required": [
-        "duration_ms",
-        "rows_in",
-        "rows_out",
-        "retry_count",
-        "row_limit_applied"
+        "row_count"
       ],
-      "title": "OutputMetrics",
+      "title": "PreparedTableStats",
       "type": "object"
     },
     "TableColumn": {
@@ -144,47 +188,10 @@
       },
       "title": "TableSample",
       "type": "object"
-    },
-    "TransformLog": {
-      "additionalProperties": false,
-      "description": "变换执行过程中的日志记录。",
-      "properties": {
-        "x-spec-version": {
-          "default": "2.0.0",
-          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
-          "title": "X-Spec-Version",
-          "type": "string"
-        },
-        "level": {
-          "description": "日志级别。",
-          "minLength": 1,
-          "title": "Level",
-          "type": "string"
-        },
-        "message": {
-          "description": "日志内容。",
-          "minLength": 1,
-          "title": "Message",
-          "type": "string"
-        },
-        "timestamp": {
-          "description": "UTC 时间的日志时间戳。",
-          "format": "date-time",
-          "title": "Timestamp",
-          "type": "string"
-        }
-      },
-      "required": [
-        "level",
-        "message",
-        "timestamp"
-      ],
-      "title": "TransformLog",
-      "type": "object"
     }
   },
   "additionalProperties": false,
-  "description": "数据变换输出的表格快照。",
+  "description": "变换执行前的准备上下文，描述输入与约束。",
   "properties": {
     "x-spec-version": {
       "default": "2.0.0",
@@ -192,20 +199,26 @@
       "title": "X-Spec-Version",
       "type": "string"
     },
-    "output_table_id": {
-      "description": "输出表唯一标识。",
-      "minLength": 1,
-      "title": "Output Table Id",
-      "type": "string"
-    },
     "prepared_table_id": {
-      "description": "关联的 PreparedTable 标识。",
+      "description": "准备阶段输出的唯一标识。",
       "minLength": 1,
       "title": "Prepared Table Id",
       "type": "string"
     },
+    "source_id": {
+      "description": "源数据标识，用于追踪血缘。",
+      "minLength": 1,
+      "title": "Source Id",
+      "type": "string"
+    },
+    "transform_id": {
+      "description": "计划中引用的变换 ID。",
+      "minLength": 1,
+      "title": "Transform Id",
+      "type": "string"
+    },
     "schema": {
-      "description": "输出表的列结构。",
+      "description": "输入数据的列结构。",
       "items": {
         "$ref": "#/$defs/TableColumn"
       },
@@ -213,40 +226,31 @@
       "title": "Schema",
       "type": "array"
     },
-    "preview": {
+    "sample": {
       "$ref": "#/$defs/TableSample",
-      "description": "输出数据的样本视图。"
+      "description": "输入数据的摘样结果。"
     },
-    "metrics": {
-      "$ref": "#/$defs/OutputMetrics",
-      "description": "执行后的指标数据。"
+    "stats": {
+      "$ref": "#/$defs/PreparedTableStats",
+      "description": "输入数据的统计特征。"
     },
-    "logs": {
-      "description": "执行过程中的日志集合。",
-      "items": {
-        "$ref": "#/$defs/TransformLog"
-      },
-      "title": "Logs",
-      "type": "array"
-    },
-    "generated_at": {
-      "description": "输出表生成时间（UTC）。",
-      "format": "date-time",
-      "title": "Generated At",
-      "type": "string"
+    "limits": {
+      "$ref": "#/$defs/PreparedTableLimits",
+      "description": "执行约束条件。"
     }
   },
   "required": [
-    "output_table_id",
     "prepared_table_id",
+    "source_id",
+    "transform_id",
     "schema",
-    "preview",
-    "metrics",
-    "generated_at"
+    "sample",
+    "stats",
+    "limits"
   ],
-  "title": "OutputTable",
+  "title": "PreparedTable",
   "type": "object",
-  "$id": "https://schemas.data-interface.local/contracts/output_table.json",
+  "$id": "https://schemas.data-interface.local/contracts/prepared_table.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "version": "2.0.0"
 }
