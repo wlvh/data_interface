@@ -10,7 +10,9 @@ from typing import Dict, List, Optional
 from apps.backend.agents import AgentContext
 from apps.backend.agents.base import AgentOutcome
 from apps.backend.compat import model_dump
+from apps.backend.contracts.task_event import TaskEvent
 from apps.backend.infra.clock import UtcClock
+from apps.backend.infra.persistence import ApiRecorder
 from apps.backend.services.pipeline import (
     PipelineAgents,
     PipelineConfig,
@@ -54,16 +56,20 @@ class TaskRunner:
         trace_store: TraceStore,
         clock: UtcClock,
         agents: PipelineAgents,
+        api_recorder: ApiRecorder,
     ) -> None:
         self._dataset_store = dataset_store
         self._trace_store = trace_store
         self._clock = clock
         self._agents = agents
-        self._history: Dict[str, List[dict]] = {}
+        self._api_recorder = api_recorder
+        self._history: Dict[str, List[TaskEvent]] = {}
         self._subscribers: Dict[str, List[asyncio.Queue]] = {}
         self._status: Dict[str, str] = {}
         self._results: Dict[str, PipelineOutcome] = {}
         self._failures: Dict[str, TaskFailure] = {}
+        self._trace_recorders: Dict[str, TraceRecorder] = {}
+        self._event_sequence: Dict[str, int] = {}
 
     async def submit_task(self, config: PipelineConfig) -> str:
         """提交任务并立即返回 task_id。"""
@@ -82,25 +88,30 @@ class TaskRunner:
             user_goal=config.user_goal,
         )
         trace_recorder = TraceRecorder(clock=self._clock)
+        self._trace_recorders[task_id] = trace_recorder
         self._history[task_id] = []
         self._subscribers[task_id] = []
         self._results.pop(task_id, None)
         self._failures.pop(task_id, None)
         self._status[task_id] = "running"
-        start_event = {
-            "type": "started",
-            "task_id": task_id,
-            "timestamp": self._clock.now().isoformat(),
-        }
+        self._event_sequence[task_id] = 0
 
         def progress_callback(node_name: str, outcome: AgentOutcome) -> None:
-            event = {
-                "type": "node_completed",
-                "task_id": task_id,
-                "node": node_name,
-                "span": model_dump(outcome.trace_span),
-            }
-            loop.call_soon_threadsafe(self._broadcast_event, task_id, event)
+            span_dump = model_dump(outcome.trace_span)
+
+            def _emit() -> None:
+                self._broadcast_event(
+                    task_id,
+                    event_type="node_completed",
+                    payload={
+                        "task_id": task_id,
+                        "node": node_name,
+                        "span": span_dump,
+                    },
+                    span_id=outcome.trace_span.span_id,
+                )
+
+            loop.call_soon_threadsafe(_emit)
 
         async def runner() -> None:
             context = AgentContext(
@@ -125,7 +136,13 @@ class TaskRunner:
             loop.call_soon_threadsafe(self._handle_completion, task_id, outcome)
 
         loop.create_task(runner())
-        self._broadcast_event(task_id, start_event)
+        self._broadcast_event(
+            task_id,
+            event_type="started",
+            payload={
+                "task_id": task_id,
+            },
+        )
         return task_id
 
     async def subscribe(self, task_id: str) -> asyncio.Queue:
@@ -143,10 +160,34 @@ class TaskRunner:
             self._subscribers[task_id].append(queue)
         return queue
 
-    def _broadcast_event(self, task_id: str, event: dict, finished: bool = False) -> None:
+    def _broadcast_event(
+        self,
+        task_id: str,
+        *,
+        event_type: str,
+        payload: dict,
+        span_id: Optional[str] = None,
+        finished: bool = False,
+    ) -> None:
         if task_id not in self._history:
             return
+        next_seq = self._event_sequence.get(task_id, 0) + 1
+        self._event_sequence[task_id] = next_seq
+        event = TaskEvent(
+            type=event_type,
+            ts=self._clock.now(),
+            sse_seq=next_seq,
+            payload=payload,
+        )
         self._history[task_id].append(event)
+        self._api_recorder.record(endpoint="api_task_stream", direction="response", payload=event)
+        if span_id is not None:
+            trace_recorder = self._trace_recorders.get(task_id)
+            if trace_recorder is not None:
+                try:
+                    trace_recorder.update_span(span_id=span_id, sse_seq=next_seq)
+                except KeyError:
+                    pass
         for queue in self._subscribers.get(task_id, []):
             queue.put_nowait(event)
         if finished:
@@ -160,14 +201,19 @@ class TaskRunner:
         self._dataset_store.save(dataset_id=outcome.profile.dataset_id, profile=outcome.profile)
         self._trace_store.save(trace=outcome.trace)
         self._failures.pop(task_id, None)
-        event = {
-            "type": "completed",
-            "task_id": task_id,
-            "plan_id": str(outcome.plan.plan_id),
-            "chart_id": outcome.chart.chart_id,
-            "rows_out": outcome.output_table.metrics.rows_out,
-        }
-        self._broadcast_event(task_id, event, finished=True)
+        self._trace_recorders.pop(task_id, None)
+        self._event_sequence.pop(task_id, None)
+        self._broadcast_event(
+            task_id,
+            event_type="completed",
+            payload={
+                "task_id": task_id,
+                "plan_id": str(outcome.plan.plan_id),
+                "chart_id": outcome.chart.chart_id,
+                "rows_out": outcome.output_table.metrics.rows_out,
+            },
+            finished=True,
+        )
 
     def _handle_failure(self, task_id: str, error: Exception) -> None:
         self._status[task_id] = "failed"
@@ -177,13 +223,18 @@ class TaskRunner:
         )
         self._failures[task_id] = failure
         self._results.pop(task_id, None)
-        event = {
-            "type": "failed",
-            "task_id": task_id,
-            "error_type": failure.error_type,
-            "error_message": failure.error_message,
-        }
-        self._broadcast_event(task_id, event, finished=True)
+        self._trace_recorders.pop(task_id, None)
+        self._event_sequence.pop(task_id, None)
+        self._broadcast_event(
+            task_id,
+            event_type="failed",
+            payload={
+                "task_id": task_id,
+                "error_type": failure.error_type,
+                "error_message": failure.error_message,
+            },
+            finished=True,
+        )
 
     def latest_result(self, task_id: str) -> Optional[PipelineOutcome]:
         """返回最新的 PipelineOutcome，若任务未完成则返回 None。"""

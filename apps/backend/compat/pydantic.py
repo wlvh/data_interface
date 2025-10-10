@@ -1,76 +1,38 @@
-"""pydantic 兼容层，为 v1/v2 提供统一接口。"""
+"""Pydantic v2 统一出口，封装常用导入与辅助函数。"""
 
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, TypeVar
+from typing import Any
 
-import pydantic
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-BaseModel = pydantic.BaseModel
-Field = pydantic.Field
-
-try:  # pragma: no cover - 取决于安装的 pydantic 版本
-    from pydantic import ConfigDict as _ConfigDict
-except ImportError:  # pragma: no cover
-    _ConfigDict = None  # type: ignore[assignment]
-
-
-def ConfigDict(**kwargs: Any) -> Any:
-    """兼容 v1/v2 的 ConfigDict 定义。"""
-
-    if _ConfigDict is None:
-        return kwargs
-    return _ConfigDict(**kwargs)
-
-
-try:  # pragma: no cover
-    from pydantic import model_validator as _model_validator
-except ImportError:  # pragma: no cover
-    from pydantic import root_validator
-
-    def _model_validator(*, mode: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """为 v1 提供与 v2 等价的 model_validator 装饰器。"""
-
-        if mode not in {"before", "after"}:
-            raise ValueError("model_validator 仅支持 before/after 模式。")
-
-        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            if mode == "before":
-                return root_validator(pre=True, allow_reuse=True)(func)
-
-            def wrapper(cls: type[BaseModel], values: dict[str, Any]) -> dict[str, Any]:
-                instance = cls.construct(**values)
-                result = func(instance)
-                if not isinstance(result, cls):
-                    raise TypeError("after validator 必须返回模型实例。")
-                return values
-
-            return root_validator(pre=False, allow_reuse=True)(wrapper)
-
-        return decorator
-
-
-model_validator = _model_validator
 
 def model_dump(payload: Any, **kwargs: Any) -> Any:
-    """兼容 v1/v2 的模型序列化接口，确保输出可直接 JSON 序列化。"""
+    """序列化 Pydantic v2 模型，返回可 JSON 化对象。"""
 
-    if "by_alias" not in kwargs:
-        kwargs["by_alias"] = True
-    if hasattr(payload, "model_dump_json"):
-        json_payload = payload.model_dump_json(**kwargs)
-        return json.loads(json_payload)
-    if hasattr(payload, "model_dump"):
+    if payload is None:
+        return None
+    if isinstance(payload, BaseModel):
+        if "by_alias" not in kwargs:
+            kwargs["by_alias"] = True
         if "mode" not in kwargs:
             kwargs["mode"] = "json"
         return payload.model_dump(**kwargs)
-    if hasattr(payload, "json"):
-        json_payload = payload.json(**kwargs)
+    if hasattr(payload, "model_dump"):
+        if "by_alias" not in kwargs:
+            kwargs["by_alias"] = True
+        if "mode" not in kwargs:
+            kwargs["mode"] = "json"
+        return payload.model_dump(**kwargs)
+    if hasattr(payload, "model_dump_json"):
+        if "by_alias" not in kwargs:
+            kwargs["by_alias"] = True
+        json_payload = payload.model_dump_json(**kwargs)
         return json.loads(json_payload)
-    if hasattr(payload, "dict"):
-        return payload.dict(**kwargs)
-    raise TypeError("无法序列化给定对象，需为 Pydantic 模型。")
+    if isinstance(payload, (dict, list, str, int, float, bool)):
+        return payload
+    raise TypeError("无法序列化给定对象，需为 Pydantic 模型或基础类型。")
 
 
 __all__ = [

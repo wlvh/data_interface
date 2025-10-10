@@ -20,7 +20,9 @@ from apps.backend.agents import (
     TransformExecutionAgent,
     ChartRecommendationAgent,
 )
+from apps.backend.compat import model_dump
 from apps.backend.infra.clock import UtcClock
+from apps.backend.infra.persistence import ApiRecorder
 from apps.backend.infra.tracing import TraceRecorder
 from apps.backend.services.pipeline import PipelineAgents, PipelineConfig, execute_pipeline
 from apps.backend.services.task_runner import TaskRunner
@@ -61,7 +63,7 @@ async def _run_task_and_wait(runner: TaskRunner, config: PipelineConfig) -> Tupl
         item = await queue.get()
         if item is None:
             break
-        events.append(item)
+        events.append(model_dump(item))
     return task_id, events
 
 
@@ -113,11 +115,13 @@ def test_task_runner_streams_events(tmp_path: Path) -> None:
         clock = UtcClock()
         dataset_store = DatasetStore()
         trace_store = TraceStore(base_path=trace_dir)
+        api_recorder = ApiRecorder(base_path=tmp_path / "api_logs_runner")
         runner = TaskRunner(
             dataset_store=dataset_store,
             trace_store=trace_store,
             clock=clock,
             agents=agents,
+            api_recorder=api_recorder,
         )
         config = PipelineConfig(
             task_id="task_runner",
@@ -134,7 +138,7 @@ def test_task_runner_streams_events(tmp_path: Path) -> None:
         assert "node_completed" in event_types
         assert event_types[-1] == "completed"
         completed_event = next(item for item in events if item["type"] == "completed")
-        assert completed_event["rows_out"] >= 1
+        assert completed_event["payload"]["rows_out"] >= 1
         trace = trace_store.require(task_id=task_id)
         assert trace.task_id == task_id
         profile = dataset_store.require(dataset_id=config.dataset_id)
@@ -154,11 +158,13 @@ def test_task_result_endpoint_returns_snapshot(tmp_path: Path) -> None:
         clock = UtcClock()
         dataset_store = DatasetStore()
         trace_store = TraceStore(base_path=trace_dir)
+        api_recorder = ApiRecorder(base_path=tmp_path / "api_logs_runner_api")
         runner = TaskRunner(
             dataset_store=dataset_store,
             trace_store=trace_store,
             clock=clock,
             agents=agents,
+            api_recorder=api_recorder,
         )
         config = PipelineConfig(
             task_id="task_api",

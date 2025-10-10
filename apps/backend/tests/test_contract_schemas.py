@@ -33,6 +33,7 @@ from apps.backend.contracts.transform import (
     TableSample,
     TransformLog,
 )
+from apps.backend.contracts.task_event import TaskEvent
 from apps.backend.contracts.trace import SpanEvent, SpanMetrics, SpanSLO, TraceRecord, TraceSpan
 from pydantic import ValidationError
 
@@ -151,6 +152,14 @@ def test_encoding_patch_schema_matches_json() -> None:
 
     generated = _normalize_schema(EncodingPatch.model_json_schema())
     stored = _normalize_schema(_load_schema("encoding_patch.json"))
+    assert generated == stored
+
+
+def test_task_event_schema_matches_json() -> None:
+    """确保任务事件契约的 JSONSchema 与模型保持一致。"""
+
+    generated = _normalize_schema(TaskEvent.model_json_schema())
+    stored = _normalize_schema(_load_schema("task_event.json"))
     assert generated == stored
 
 

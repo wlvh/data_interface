@@ -27,6 +27,7 @@ from apps.backend.contracts.plan import (
     PlanAssumption,
     TransformDraft,
 )
+from apps.backend.contracts.task_event import TaskEvent
 from apps.backend.contracts.trace import SpanEvent, SpanMetrics, SpanSLO, TraceRecord, TraceSpan
 from apps.backend.contracts.transform import (
     OutputMetrics,
@@ -78,4 +79,5 @@ __all__ = [
     "SpanMetrics",
     "TraceSpan",
     "TraceRecord",
+    "TaskEvent",
 ]

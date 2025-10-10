@@ -1,0 +1,51 @@
+{
+  "additionalProperties": false,
+  "description": "标准化的 SSE 事件结构，支持断线重放。",
+  "properties": {
+    "x-spec-version": {
+      "default": "2.0.0",
+      "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+      "title": "X-Spec-Version",
+      "type": "string"
+    },
+    "type": {
+      "description": "事件类型，覆盖任务全生命周期。",
+      "enum": [
+        "started",
+        "node_completed",
+        "completed",
+        "failed"
+      ],
+      "title": "Type",
+      "type": "string"
+    },
+    "ts": {
+      "description": "事件生成时间（UTC）。",
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+    },
+    "sse_seq": {
+      "description": "SSE 推送序号，单调递增。",
+      "minimum": 0,
+      "title": "Sse Seq",
+      "type": "integer"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "description": "事件附带的结构化载荷。",
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "required": [
+    "type",
+    "ts",
+    "sse_seq"
+  ],
+  "title": "TaskEvent",
+  "type": "object",
+  "$id": "https://schemas.data-interface.local/contracts/task_event.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "2.0.0"
+}

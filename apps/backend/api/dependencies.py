@@ -71,4 +71,5 @@ def get_task_runner() -> TaskRunner:
         trace_store=get_trace_store(),
         clock=get_clock(),
         agents=get_pipeline_agents(),
+        api_recorder=get_api_recorder(),
     )
