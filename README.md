@@ -16,24 +16,41 @@ Data Interface 是一个面向多行业、多数据域的智能分析操作系�
 
 ## 目录与职责
 
-| 路径 | 角色定位 | 关键内容 |
-| --- | --- | --- |
-| `apps/backend/` | 后端与 AI 服务骨架 | FastAPI 应用、Agent 编排、契约定义、Trace 追踪。 |
-| `apps/backend/api/` | HTTP 接口层 | FastAPI 路由，现已覆盖 `/api/data/scan`、`/api/plan/refine`、`/api/trace/*`、`/api/task/*`。 |
-| `apps/backend/agents/` | 原子 Agent 能力 | 数据扫描、计划细化、变换执行、图表推荐、解释生成，以及通用 `AgentContext`。 |
-| `apps/backend/infra/` | 基础设施 | `UtcClock`、`TraceRecorder` 等跨域工具。 |
-| `apps/backend/compat/` | 兼容层 | Pydantic v1/v2 适配，统一 `ConfigDict` 与 `model_validator`。 |
-| `apps/backend/services/` | 状态图编排 | `StateMachineOrchestrator`、`pipeline.py` 与 `task_runner.py` 负责多节点组合与任务流。 |
-| `apps/backend/stores/` | 内存缓存 | `DatasetStore`、`TraceStore` 用于画像与 Trace 回放。 |
-| `apps/backend/contracts/` | 数据契约与领域模型 | `dataset_profile.py`、`plan.py`、`trace.py` 等及镜像 `schema/*.json`。 |
-| `apps/backend/tests/` | 契约与流程校验 | Schema 同步测试、状态图单元测试。 |
-| `apps/frontend/` | 主产品前端（待 TS 化） | Vite App、Redux 迁移中，承载编码货架、图表模板、AI 交互界面。 |
-| `var/` | 运行时落盘 | `traces/` 存储 Trace JSON；`api_logs/` 落盘 API 请求/响应。 |
-| `tmp_traces/` | 开发期调试输出 | 拆分调试阶段的 Trace 栈，便于对比离线与线上结果。 |
-| `AGENTS.md` | Agent 策略草案 | 描述现有/计划中的多 Agent 协作框架 |
-| `Walmart.csv` | 演示数据 | 示例数据集，未来应替换为可配置数据源 |
+### 后端（`apps/backend`）
 
-> 约定：一个文件夹只负责一个业务领域；新增能力务必先明确归属再落代码，README 必须同步更新。
+| 路径 | 责任焦点 | 关键说明 |
+| --- | --- | --- |
+| `apps/backend/api/` | HTTP 接入与契约 | `app.py` 构建 FastAPI 应用；`routes.py` 汇集扫描、计划、变换、图表、任务、Trace 等端点并统一落盘审计；`dependencies.py` 管理依赖注入；`schemas.py` 定义所有请求/响应模型，保证 Pydantic 校验一致。 |
+| `apps/backend/agents/` | 原子智能能力 | 各 Agent 模块封装扫描、计划细化、变换执行、图表推荐、解释生成等能力，`base.py` 提供统一的 `Agent`/`AgentOutcome` 协议，并暴露 `AgentContext` 以承载 Trace 与任务信息。 |
+| `apps/backend/services/` | 流程编排与任务运行时 | `orchestrator.py` 实现 `StateMachineOrchestrator`，以状态图顺序驱动多 Agent；`pipeline.py` 定义 `PipelineConfig/Agents/Outcome` 以及 `execute_pipeline` 主流程；`task_runner.py` 提供异步线程池调度与 SSE 发布，向 `/api/task/*` 提供快照能力。 |
+| `apps/backend/stores/` | 运行时缓存层 | `DatasetStore` 与 `TraceStore` 提供内存态缓存/回放入口，负责 Fail Fast 的读取与写入，后续可扩展至持久化后端。 |
+| `apps/backend/infra/` | 横切基础设施 | `clock.py` 提供 UTC 时钟抽象；`persistence.py` 封装 `ApiRecorder` 的落盘策略；`tracing.py` 定义 `TraceRecorder`，负责 Span 聚合与 Trace 重建。 |
+| `apps/backend/compat/` | Pydantic 兼容层 | 统一封装 `BaseModel`、`ConfigDict`、`model_validator`，屏蔽 v1/v2 差异，确保契约在不同运行环境下保持一致。 |
+| `apps/backend/contracts/` | 领域契约 | 定义 `DatasetProfile`、`Plan`、`Transform`、`TraceRecord`、`ChartSpec` 等核心模型；`schema/` 内存放对应 JSONSchema 导出处，供前后端和外部系统复用。 |
+| `apps/backend/tests/` | 自动化保障 | 覆盖 API Recorder、Schema 导出、状态图编排、Pipeline 执行与 Trace 回放等关键路径，保证契约与流程不回退。 |
+
+### 前端（`apps/frontend`）
+
+| 路径 | 责任焦点 | 关键说明 |
+| --- | --- | --- |
+| `apps/frontend/src/main.js` | 客户端入口 | Vite 启动脚本，待迁移至 TypeScript，同时挂载全局状态管理与调试工具。 |
+| `apps/frontend/src/contract/` | 前端契约镜像 | 临时维护前端对后端契约的 JS 版本（如 `schema.js`），后续将由自动生成流程替换。 |
+| `apps/frontend/src/runtime/` | 客户端运行时工具 | `dataProcessor.js` 等文件负责把后端 `ChartSpec`、`PreparedTable` 加工为前端可渲染结构，未来会接入统一的事件总线。 |
+| `apps/frontend/src/ui/` | UI 组件占位 | 预留交互组件与模板库目录，目前为迁移准备阶段。 |
+| `apps/frontend/public/` | 静态资源 | favicon、开放路由静态文件等。 |
+
+### 根目录与运行资产
+
+| 路径 | 责任焦点 | 关键说明 |
+| --- | --- | --- |
+| `var/` | 运行期落盘 | `api_logs/` 保存每次 API 进/出参；`traces/` 存储任务 Trace JSON；`uv-cache/` 用于 uv 依赖缓存，便于离线开发。 |
+| `tmp_traces/` | 调试 Trace 输出 | 供开发过程对比本地与线上 Span 链路，随时可清理但须注意版本差异。 |
+| `Walmart.csv` | 演示数据源 | 默认演示数据集，真实部署时需替换为多源配置或接入数据仓库。 |
+| `AGENTS.md` | Agent 设计蓝图 | 记录现有与规划中的多 Agent 协作策略及 Prompt 约束，是提交新 Agent 的必读文档。 |
+| `requirements.txt` | Python 依赖锁定 | 配合 `uv` 管理器，确保 `.venv`（CPython 3.13.5）环境一致。 |
+| `tmp_runner.*` / `tmp_sample.csv` / `tmp_runner.log` | 本地实验产物 | 线程池执行、采样脚本的临时输出，便于追踪数据漂移或压测记录，清理前需确认是否进入审计体系。 |
+
+> 约定：新增模块前先定位所属目录并更新此表；若职责存在跨域依赖，必须同步补充 `AGENTS.md` 或根目录 TODO，避免架构漂移。
 
 ## 核心流程（状态图视角）
 
@@ -45,13 +62,6 @@ Data Interface 是一个面向多行业、多数据域的智能分析操作系�
 6. **Explain Agent**：以“数据摘要 + 代码 + 结果”为输入，输出短 Markdown。
 7. **Task Stream & Trace Replay**：`TaskRunner` 推送节点事件，并将 Trace 树与 API 进出参落盘，便于离线回放。
 
-## 工程现状
-
-- **前端技术债**：`apps/frontend/src` 仍以 JS 为主，需迁移至 TS + Redux Toolkit，并建立统一的 `ChartSpec` 适配层与事件总线。
-- **后端骨架**：已落地 FastAPI `/api/data/scan`、`/api/plan/refine`、`/api/trace/*`、`/api/task/*`，并完成 Scan → Plan → Transform → Chart → Explain 编排；`/api/transform/*` 等细分接口、OpenTelemetry 与 SLO Dashboard 尚缺。
-- **任务编排**：`TaskRunner` 将 `execute_pipeline` 以线程池方式异步执行，并通过 SSE 推送节点级事件；缺少失败重试、超时治理和节点级日志清理，需要在后续迭代补齐。
-- **知识库建设**：新增内存级 `DatasetStore` 与字段 Top-K 摘要，下阶段需引入持久化、分箱策略与缓存淘汰。
-- **状态同步**：`replaceChart` 等事件总线尚未统一，需在 Redux 层收口并打通前后端 Trace 标识。
 
 ## 快速开始
 
