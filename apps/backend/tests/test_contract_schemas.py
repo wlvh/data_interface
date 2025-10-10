@@ -11,7 +11,7 @@ import pytest
 from apps.backend.contracts.chart_spec import ChartA11y, ChartLayout, ChartSpec
 from apps.backend.contracts.chart_template import ChartEncoding, ChartTemplate
 from apps.backend.contracts.dataset_profile import DatasetProfile, DatasetSampling, DatasetSummary
-from apps.backend.contracts.encoding_patch import EncodingPatch, EncodingPatchOp
+from apps.backend.contracts.encoding_patch import EncodingPatch, EncodingPatchOp, EncodingPatchProposal
 from apps.backend.contracts.explanation import ExplanationArtifact
 from apps.backend.contracts.fields import FieldSchema, FieldStatistics, ValueRange
 from apps.backend.contracts.plan import (
@@ -23,6 +23,8 @@ from apps.backend.contracts.plan import (
     PlanAssumption,
     TransformDraft,
 )
+from apps.backend.contracts.recommendation import RecommendationList
+from apps.backend.contracts.session_bundle import SessionBundle
 from apps.backend.contracts.transform import (
     OutputMetrics,
     OutputTable,
@@ -155,11 +157,35 @@ def test_encoding_patch_schema_matches_json() -> None:
     assert generated == stored
 
 
+def test_encoding_patch_proposal_schema_matches_json() -> None:
+    """确保编码补丁候选契约的 JSONSchema 与模型一致。"""
+
+    generated = _normalize_schema(EncodingPatchProposal.model_json_schema())
+    stored = _normalize_schema(_load_schema("encoding_patch_proposal.json"))
+    assert generated == stored
+
+
 def test_task_event_schema_matches_json() -> None:
     """确保任务事件契约的 JSONSchema 与模型保持一致。"""
 
     generated = _normalize_schema(TaskEvent.model_json_schema())
     stored = _normalize_schema(_load_schema("task_event.json"))
+    assert generated == stored
+
+
+def test_recommendation_list_schema_matches_json() -> None:
+    """确保推荐列表契约 Schema 与模型保持一致。"""
+
+    generated = _normalize_schema(RecommendationList.model_json_schema())
+    stored = _normalize_schema(_load_schema("recommendation_list.json"))
+    assert generated == stored
+
+
+def test_session_bundle_schema_matches_json() -> None:
+    """确保会话包契约 Schema 与模型保持一致。"""
+
+    generated = _normalize_schema(SessionBundle.model_json_schema())
+    stored = _normalize_schema(_load_schema("session_bundle.json"))
     assert generated == stored
 
 

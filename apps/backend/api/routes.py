@@ -12,7 +12,15 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 
-from apps.backend.agents import AgentContext, ScanPayload, TransformPayload, ChartPayload
+from apps.backend.agents import (
+    AgentContext,
+    ScanPayload,
+    TransformPayload,
+    ChartPayload,
+    NaturalEditPayload,
+    NaturalEditAgent,
+    ChartRecommendationResult,
+)
 from apps.backend.compat import model_dump
 from apps.backend.agents.transform import TransformArtifacts
 from apps.backend.api.dependencies import (
@@ -22,6 +30,7 @@ from apps.backend.api.dependencies import (
     get_pipeline_agents,
     get_task_runner,
     get_trace_store,
+    get_natural_edit_agent,
 )
 from apps.backend.api.schemas import (
     PlanRequest,
@@ -44,11 +53,14 @@ from apps.backend.api.schemas import (
     NaturalEditRequest,
     NaturalEditResponse,
     SchemaExportResponse,
+    SessionBundleResponse,
 )
 from apps.backend.contracts.chart_spec import ChartSpec
 from apps.backend.contracts.dataset_profile import DatasetProfile, DatasetSummary
-from apps.backend.contracts.encoding_patch import EncodingPatch, EncodingPatchOp
+from apps.backend.contracts.encoding_patch import EncodingPatch, EncodingPatchOp, EncodingPatchProposal
 from apps.backend.contracts.plan import Plan
+from apps.backend.contracts.recommendation import RecommendationList
+from apps.backend.contracts.session_bundle import SessionBundle
 from apps.backend.contracts.task_event import TaskEvent
 from apps.backend.contracts.trace import TraceRecord, TraceSpan, SpanMetrics, SpanEvent, SpanSLO
 from apps.backend.contracts.transform import (
@@ -62,6 +74,7 @@ from apps.backend.contracts.transform import (
 from apps.backend.infra.persistence import ApiRecorder
 from apps.backend.infra.tracing import TraceRecorder
 from apps.backend.services.pipeline import PipelineConfig, PipelineOutcome, execute_pipeline
+from apps.backend.services.session_bundle import build_session_bundle
 from apps.backend.services.task_runner import TaskRunner
 from apps.backend.stores import DatasetStore, TraceStore
 
@@ -76,6 +89,9 @@ SCHEMA_EXPORT_MODELS: dict[str, type] = {
     OutputTable.schema_name(): OutputTable,
     ChartSpec.schema_name(): ChartSpec,
     EncodingPatch.schema_name(): EncodingPatch,
+    EncodingPatchProposal.schema_name(): EncodingPatchProposal,
+    RecommendationList.schema_name(): RecommendationList,
+    SessionBundle.schema_name(): SessionBundle,
     TraceRecord.schema_name(): TraceRecord,
     TaskEvent.schema_name(): TaskEvent,
 }
@@ -95,6 +111,30 @@ def _ensure_path(path_str: str) -> Path:
         message = f"数据源路径不存在: {path_str}"
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
     return path
+
+
+def _append_span_to_trace(
+    *,
+    base_trace: Optional[TraceRecord],
+    new_span: TraceSpan,
+    task_id: str,
+    dataset_id: str,
+    clock,
+) -> TraceRecord:
+    """合并历史 Trace 与新增 Span，生成新的 TraceRecord。"""
+
+    spans: List[TraceSpan] = []
+    if base_trace is not None:
+        spans.extend(base_trace.spans)
+    spans.append(new_span)
+    trace_record = TraceRecord(
+        trace_id=str(uuid4()),
+        task_id=task_id,
+        dataset_id=dataset_id,
+        created_at=clock.now(),
+        spans=spans,
+    )
+    return trace_record
 
 
 def _record_request(api_recorder: ApiRecorder, endpoint: str, payload: object) -> None:
@@ -401,6 +441,7 @@ def refine_plan(
             prepared_table=outcome.prepared_table,
             output_table=outcome.output_table,
             chart=outcome.chart,
+            recommendations=outcome.recommendations,
             encoding_patch=outcome.encoding_patch,
             explanation=outcome.explanation,
             trace=outcome.trace,
@@ -583,6 +624,7 @@ def fetch_task_result(
                 prepared_table=outcome.prepared_table,
                 output_table=outcome.output_table,
                 chart=outcome.chart,
+                recommendations=outcome.recommendations,
                 encoding_patch=outcome.encoding_patch,
                 explanation=outcome.explanation,
                 trace=outcome.trace,
@@ -853,19 +895,30 @@ def recommend_chart(
             trace_recorder=trace_recorder,
             clock=clock,
         )
+        base_trace: Optional[TraceRecord] = None
+        try:
+            base_trace = trace_store.require(task_id=request.task_id)
+        except KeyError:
+            base_trace = None
         payload = ChartPayload(
             plan=request.plan,
             table_id=request.table_id,
         )
         outcome = agents.chart.run(context=context, payload=payload)
-        trace = trace_recorder.build_trace(
+        chart_result = outcome.output
+        if not isinstance(chart_result, ChartRecommendationResult):
+            message = "图表推荐结果类型非法。"
+            raise TypeError(message)
+        trace = _append_span_to_trace(
+            base_trace=base_trace,
+            new_span=outcome.trace_span,
             task_id=request.task_id,
             dataset_id=request.dataset_id,
-            spans=[outcome.trace_span],
+            clock=clock,
         )
         trace_store.save(trace=trace)
         response = ChartRecommendResponse(
-            chart_spec=outcome.output,
+            recommendations=chart_result.recommendations,
             trace=trace,
         )
     except HTTPException as error:
@@ -892,30 +945,102 @@ def recommend_chart(
 @router.post("/api/natural/edit", response_model=NaturalEditResponse)
 def natural_edit(
     request: NaturalEditRequest,
+    trace_store: TraceStore = Depends(get_trace_store),
+    clock=Depends(get_clock),
+    natural_edit_agent: NaturalEditAgent = Depends(get_natural_edit_agent),
     api_recorder: ApiRecorder = Depends(get_api_recorder),
 ) -> NaturalEditResponse:
-    """基于自然语言指令生成编码补丁占位实现。"""
+    """解析自然语言指令并返回补丁候选。"""
 
     endpoint = "api_natural_edit"
     _record_request(api_recorder=api_recorder, endpoint=endpoint, payload=request)
     try:
-        patch = EncodingPatch(
-            target_chart_id=request.chart_spec.chart_id,
-            ops=[
-                EncodingPatchOp(
-                    op_type="add",
-                    path=["parameters", "natural_edit_notes"],
-                    value={
-                        "command": request.nl_command,
-                        "applied_at": "auto",
-                    },
-                ),
-            ],
-            rationale="记录自然语言编辑指令，后续由前端解释执行。",
+        trace_recorder = _create_trace_recorder(clock=clock)
+        context = AgentContext(
+            task_id=request.task_id,
+            dataset_id=request.dataset_id,
+            trace_recorder=trace_recorder,
+            clock=clock,
         )
-        response = NaturalEditResponse(encoding_patch=patch)
+        base_trace: Optional[TraceRecord] = None
+        try:
+            base_trace = trace_store.require(task_id=request.task_id)
+        except KeyError:
+            base_trace = None
+        payload = NaturalEditPayload(chart_spec=request.chart_spec, nl_command=request.nl_command)
+        outcome = natural_edit_agent.run(context=context, payload=payload)
+        edit_result = outcome.output
+        proposals = edit_result.proposals
+        trace = _append_span_to_trace(
+            base_trace=base_trace,
+            new_span=outcome.trace_span,
+            task_id=request.task_id,
+            dataset_id=request.dataset_id,
+            clock=clock,
+        )
+        trace_store.save(trace=trace)
+        response = NaturalEditResponse(
+            proposals=proposals,
+            recommended_index=edit_result.recommended_index,
+            trace=trace,
+            ambiguity_reason=edit_result.ambiguity_reason,
+        )
     except Exception as error:  # noqa: BLE001 - 记录并抛出未知异常
         LOGGER.exception("自然语言编辑生成补丁失败", extra={"endpoint": endpoint})
+        _record_error(
+            api_recorder=api_recorder,
+            endpoint=endpoint,
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+        raise
+    _record_response(api_recorder=api_recorder, endpoint=endpoint, payload=response)
+    return response
+
+
+@router.get("/api/session/{task_id}/bundle", response_model=SessionBundleResponse)
+def export_session_bundle(
+    task_id: str,
+    task_runner: TaskRunner = Depends(get_task_runner),
+    trace_store: TraceStore = Depends(get_trace_store),
+    dataset_store: DatasetStore = Depends(get_dataset_store),
+    clock=Depends(get_clock),
+    api_recorder: ApiRecorder = Depends(get_api_recorder),
+) -> SessionBundleResponse:
+    """导出指定任务的 SessionBundle。"""
+
+    endpoint = "api_session_bundle"
+    _record_request(api_recorder=api_recorder, endpoint=endpoint, payload={"task_id": task_id})
+    try:
+        bundle = build_session_bundle(
+            task_id=task_id,
+            task_runner=task_runner,
+            trace_store=trace_store,
+            dataset_store=dataset_store,
+            clock=clock,
+        )
+        response = SessionBundleResponse(bundle=bundle)
+    except KeyError as error:
+        _record_error(
+            api_recorder=api_recorder,
+            endpoint=endpoint,
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    except ValueError as error:
+        _record_error(
+            api_recorder=api_recorder,
+            endpoint=endpoint,
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+            status_code=status.HTTP_409_CONFLICT,
+        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    except Exception as error:  # noqa: BLE001 - 统一兜底记录
+        LOGGER.exception("会话包导出失败", extra={"endpoint": endpoint})
         _record_error(
             api_recorder=api_recorder,
             endpoint=endpoint,

@@ -11,6 +11,7 @@ from apps.backend.agents import (
     PlanRefinementAgent,
     TransformExecutionAgent,
     ChartRecommendationAgent,
+    NaturalEditAgent,
 )
 from apps.backend.infra.clock import UtcClock
 from apps.backend.infra.persistence import ApiRecorder
@@ -60,6 +61,13 @@ def get_pipeline_agents() -> PipelineAgents:
         chart=ChartRecommendationAgent(),
         explainer=ExplanationAgent(),
     )
+
+
+@lru_cache
+def get_natural_edit_agent() -> NaturalEditAgent:
+    """提供自然语言编辑 Agent。"""
+
+    return NaturalEditAgent()
 
 
 @lru_cache

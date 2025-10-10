@@ -58,3 +58,27 @@ class EncodingPatch(VersionedContractModel):
         json_schema_extra={"minItems": 1},
     )
     rationale: str = Field(description="提出该补丁的原因说明。", min_length=1)
+
+
+class EncodingPatchProposal(VersionedContractModel):
+    """对编码补丁的候选方案，带有置信度与摘要说明。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @classmethod
+    def schema_name(cls) -> str:
+        """返回编码补丁候选的 Schema 名称。"""
+
+        return "encoding_patch_proposal"
+
+    proposal_id: str = Field(description="候选补丁的唯一标识。", min_length=1)
+    patch: EncodingPatch = Field(description="建议应用的编码补丁。")
+    confidence: float = Field(
+        description="补丁建议的可信度，范围 [0, 1]。",
+        ge=0.0,
+        le=1.0,
+    )
+    summary: str = Field(
+        description="针对该补丁的简要说明。",
+        min_length=1,
+    )

@@ -18,6 +18,7 @@ from apps.backend.agents import (
     TransformPayload,
     ChartPayload,
     ChartRecommendationAgent,
+    ChartRecommendationResult,
     TransformArtifacts,
 )
 from apps.backend.agents.base import AgentOutcome
@@ -26,6 +27,7 @@ from apps.backend.contracts.encoding_patch import EncodingPatch, EncodingPatchOp
 from apps.backend.contracts.explanation import ExplanationArtifact
 from apps.backend.contracts.plan import Plan
 from apps.backend.contracts.chart_spec import ChartSpec
+from apps.backend.contracts.recommendation import RecommendationList
 from apps.backend.contracts.trace import TraceRecord, TraceSpan
 from apps.backend.contracts.transform import OutputTable, PreparedTable
 from apps.backend.infra.tracing import TraceRecorder
@@ -65,6 +67,7 @@ class PipelineOutcome:
     prepared_table: PreparedTable
     output_table: OutputTable
     chart: ChartSpec
+    recommendations: RecommendationList
     encoding_patch: EncodingPatch
     explanation: ExplanationArtifact
     trace: TraceRecord
@@ -163,10 +166,13 @@ def execute_pipeline(
     artifacts = result.outputs["transform"]
     if not isinstance(artifacts, TransformArtifacts):
         raise TypeError("变换节点输出类型非法。")
-    chart = result.outputs["chart"]
+    chart_output = result.outputs["chart"]
+    if not isinstance(chart_output, ChartRecommendationResult):
+        raise TypeError("图表节点输出类型非法。")
     explanation = result.outputs["explain"]
+    primary_chart = chart_output.primary_chart
     encoding_patch = EncodingPatch(
-        target_chart_id=chart.chart_id,
+        target_chart_id=primary_chart.chart_id,
         ops=[
             EncodingPatchOp(
                 op_type="add",
@@ -186,7 +192,8 @@ def execute_pipeline(
         plan=plan,
         prepared_table=artifacts.prepared_table,
         output_table=artifacts.output_table,
-        chart=chart,
+        chart=primary_chart,
+        recommendations=chart_output.recommendations,
         encoding_patch=encoding_patch,
         explanation=explanation,
         trace=trace,

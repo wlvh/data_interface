@@ -1,0 +1,2437 @@
+{
+  "$defs": {
+    "ChartA11y": {
+      "additionalProperties": false,
+      "description": "无障碍配置，辅助屏幕阅读与结构化解释。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "title": {
+          "description": "图表的可读标题。",
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "summary": {
+          "description": "面向屏幕阅读器的结构化总结。",
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "annotations": {
+          "description": "额外的说明或警告列表。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Annotations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "title",
+        "summary"
+      ],
+      "title": "ChartA11y",
+      "type": "object"
+    },
+    "ChartAxis": {
+      "additionalProperties": false,
+      "description": "坐标轴配置，控制刻度、标题与网格。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "channel": {
+          "description": "绑定的视觉通道。",
+          "minLength": 1,
+          "title": "Channel",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "坐标轴标题。",
+          "title": "Title"
+        },
+        "grid": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "是否显示网格线。",
+          "title": "Grid"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "刻度格式，如百分比或日期格式字符串。",
+          "title": "Format"
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "title": "ChartAxis",
+      "type": "object"
+    },
+    "ChartChannelMapping": {
+      "additionalProperties": false,
+      "description": "模板编码映射，描述字段如何绑定到视觉通道。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "channel": {
+          "description": "视觉通道名称，例如 x、y、color。",
+          "minLength": 1,
+          "title": "Channel",
+          "type": "string"
+        },
+        "field_name": {
+          "description": "绑定到该通道的字段。",
+          "minLength": 1,
+          "title": "Field Name",
+          "type": "string"
+        },
+        "aggregation": {
+          "description": "字段在该通道的聚合方式。",
+          "enum": [
+            "none",
+            "sum",
+            "avg",
+            "count"
+          ],
+          "title": "Aggregation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel",
+        "field_name",
+        "aggregation"
+      ],
+      "title": "ChartChannelMapping",
+      "type": "object"
+    },
+    "ChartLayout": {
+      "additionalProperties": false,
+      "description": "布局配置，约束画布尺寸与主题。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "width": {
+          "description": "画布宽度（像素）。",
+          "minimum": 100,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "description": "画布高度（像素）。",
+          "minimum": 100,
+          "title": "Height",
+          "type": "integer"
+        },
+        "padding": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "周围留白像素数。",
+          "title": "Padding"
+        },
+        "theme": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "主题名称或配色方案。",
+          "title": "Theme"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "title": "ChartLayout",
+      "type": "object"
+    },
+    "ChartLegend": {
+      "additionalProperties": false,
+      "description": "图例配置，确保视觉元素可解读。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "channel": {
+          "description": "关联的视觉通道。",
+          "minLength": 1,
+          "title": "Channel",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "图例标题。",
+          "title": "Title"
+        },
+        "orient": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "图例位置，如 right、bottom。",
+          "title": "Orient"
+        },
+        "show": {
+          "description": "是否展示该图例。",
+          "title": "Show",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "channel",
+        "show"
+      ],
+      "title": "ChartLegend",
+      "type": "object"
+    },
+    "ChartPlanItem": {
+      "additionalProperties": false,
+      "description": "计划中的图表模板候选项。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "template_id": {
+          "description": "引用的模板 ID。",
+          "minLength": 1,
+          "title": "Template Id",
+          "type": "string"
+        },
+        "engine": {
+          "description": "渲染引擎类型。",
+          "enum": [
+            "vega-lite",
+            "echarts"
+          ],
+          "title": "Engine",
+          "type": "string"
+        },
+        "confidence": {
+          "description": "推荐置信度，范围 [0, 1]。",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "rationale": {
+          "description": "推荐该模板的理由。",
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "encoding": {
+          "description": "字段到视觉通道的映射集合。",
+          "items": {
+            "$ref": "#/$defs/ChartChannelMapping"
+          },
+          "minItems": 1,
+          "title": "Encoding",
+          "type": "array"
+        },
+        "layout_hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "对布局或联动的补充说明。",
+          "title": "Layout Hint"
+        }
+      },
+      "required": [
+        "template_id",
+        "engine",
+        "confidence",
+        "rationale",
+        "encoding"
+      ],
+      "title": "ChartPlanItem",
+      "type": "object"
+    },
+    "ChartRecommendationCandidate": {
+      "additionalProperties": false,
+      "description": "单个图表推荐候选，包含 ChartSpec 与解释信息。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "candidate_id": {
+          "description": "候选标识，便于前端引用。",
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "chart_spec": {
+          "$ref": "#/$defs/ChartSpec",
+          "description": "推荐的图表规范。"
+        },
+        "confidence": {
+          "description": "推荐置信度，范围 [0, 1]。",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "rationale": {
+          "description": "推荐理由的摘要。",
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "intent_tags": {
+          "description": "该推荐覆盖的分析意图标签，如 trend/comparison。",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Intent Tags",
+          "type": "array"
+        },
+        "coverage": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "可选的分析覆盖说明，例如字段覆盖率或新增角度。",
+          "title": "Coverage"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "chart_spec",
+        "confidence",
+        "rationale",
+        "intent_tags"
+      ],
+      "title": "ChartRecommendationCandidate",
+      "type": "object"
+    },
+    "ChartScale": {
+      "additionalProperties": false,
+      "description": "描述单个视觉通道的缩放配置。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "channel": {
+          "description": "对应的视觉通道，例如 x 或 color。",
+          "minLength": 1,
+          "title": "Channel",
+          "type": "string"
+        },
+        "scale_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "缩放类型，例如 linear、point。",
+          "title": "Scale Type"
+        },
+        "domain": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "缩放域，指定值域范围。",
+          "title": "Domain"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "缩放值域映射。",
+          "title": "Range"
+        },
+        "nice": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "是否启用 nice 取整策略。",
+          "title": "Nice"
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "title": "ChartScale",
+      "type": "object"
+    },
+    "ChartSpec": {
+      "additionalProperties": false,
+      "description": "图表最终规范，组合模板与编码映射。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "chart_id": {
+          "description": "图表唯一标识。",
+          "minLength": 1,
+          "title": "Chart Id",
+          "type": "string"
+        },
+        "template_id": {
+          "description": "引用的基础模板 ID。",
+          "minLength": 1,
+          "title": "Template Id",
+          "type": "string"
+        },
+        "engine": {
+          "description": "渲染引擎类型，例如 vega-lite。",
+          "minLength": 1,
+          "title": "Engine",
+          "type": "string"
+        },
+        "data_source": {
+          "description": "绑定的数据表 ID。",
+          "minLength": 1,
+          "title": "Data Source",
+          "type": "string"
+        },
+        "encoding": {
+          "description": "字段到视觉通道的映射。",
+          "items": {
+            "$ref": "#/$defs/ChartChannelMapping"
+          },
+          "minItems": 1,
+          "title": "Encoding",
+          "type": "array"
+        },
+        "scales": {
+          "description": "视觉通道对应的缩放集合。",
+          "items": {
+            "$ref": "#/$defs/ChartScale"
+          },
+          "title": "Scales",
+          "type": "array"
+        },
+        "legends": {
+          "description": "图例配置列表。",
+          "items": {
+            "$ref": "#/$defs/ChartLegend"
+          },
+          "title": "Legends",
+          "type": "array"
+        },
+        "axes": {
+          "description": "坐标轴配置列表。",
+          "items": {
+            "$ref": "#/$defs/ChartAxis"
+          },
+          "title": "Axes",
+          "type": "array"
+        },
+        "layout": {
+          "$ref": "#/$defs/ChartLayout",
+          "description": "图表布局设定。"
+        },
+        "a11y": {
+          "$ref": "#/$defs/ChartA11y",
+          "description": "无障碍相关的说明与提示。"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "description": "模板参数或配置项。",
+          "title": "Parameters",
+          "type": "object"
+        }
+      },
+      "required": [
+        "chart_id",
+        "template_id",
+        "engine",
+        "data_source",
+        "encoding",
+        "layout",
+        "a11y"
+      ],
+      "title": "ChartSpec",
+      "type": "object"
+    },
+    "DatasetProfile": {
+      "additionalProperties": false,
+      "description": "完整的数据集画像契约。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "dataset_id": {
+          "description": "数据集的唯一标识。",
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "dataset_version": {
+          "description": "数据集版本号。",
+          "minLength": 1,
+          "title": "Dataset Version",
+          "type": "string"
+        },
+        "name": {
+          "description": "数据集名称。",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "数据集的业务描述。",
+          "title": "Description"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "数据来源或上传渠道。",
+          "title": "Source"
+        },
+        "created_at": {
+          "description": "数据集创建时间（UTC）。",
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "profiled_at": {
+          "description": "画像生成时间（UTC）。",
+          "format": "date-time",
+          "title": "Profiled At",
+          "type": "string"
+        },
+        "row_count": {
+          "description": "全量记录数。",
+          "minimum": 0,
+          "title": "Row Count",
+          "type": "integer"
+        },
+        "total_bytes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "原始数据集大小（字节）。",
+          "title": "Total Bytes"
+        },
+        "hash_digest": {
+          "description": "用于缓存和重放的哈希摘要。",
+          "minLength": 8,
+          "title": "Hash Digest",
+          "type": "string"
+        },
+        "summary": {
+          "$ref": "#/$defs/DatasetSummary",
+          "description": "轻量级摘要，用于传递给模型。"
+        },
+        "profiling_notes": {
+          "description": "画像过程中人工或自动记录的备注。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Profiling Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dataset_id",
+        "dataset_version",
+        "name",
+        "created_at",
+        "profiled_at",
+        "row_count",
+        "hash_digest",
+        "summary"
+      ],
+      "title": "DatasetProfile",
+      "type": "object"
+    },
+    "DatasetSampling": {
+      "additionalProperties": false,
+      "description": "描述摘要生成时采用的采样策略。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "strategy": {
+          "description": "采样策略名称，例如 head、random、stratified。",
+          "minLength": 1,
+          "title": "Strategy",
+          "type": "string"
+        },
+        "size": {
+          "description": "采样的目标行数。",
+          "minimum": 1,
+          "title": "Size",
+          "type": "integer"
+        },
+        "seed": {
+          "description": "采样所用的随机种子，固定后即可回放。",
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "strategy",
+        "size",
+        "seed"
+      ],
+      "title": "DatasetSampling",
+      "type": "object"
+    },
+    "DatasetSummary": {
+      "additionalProperties": false,
+      "description": "面向 LLM 和前端的轻量级数据摘要。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "dataset_id": {
+          "description": "数据集的唯一标识。",
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "dataset_version": {
+          "description": "数据集版本号，用于缓存控制。",
+          "minLength": 1,
+          "title": "Dataset Version",
+          "type": "string"
+        },
+        "generated_at": {
+          "description": "UTC 时间的摘要生成时间戳。",
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "row_count": {
+          "description": "摘要统计的记录数。",
+          "minimum": 0,
+          "title": "Row Count",
+          "type": "integer"
+        },
+        "sampling": {
+          "$ref": "#/$defs/DatasetSampling",
+          "description": "生成摘要时采用的采样策略。"
+        },
+        "fields": {
+          "description": "字段契约集合，用于驱动图表与规划。",
+          "items": {
+            "$ref": "#/$defs/FieldSchema"
+          },
+          "minItems": 1,
+          "title": "Fields",
+          "type": "array"
+        },
+        "sample_rows": {
+          "description": "用于上下文示例的样本行，所有值均序列化为字符串。",
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "maxItems": 20,
+          "title": "Sample Rows",
+          "type": "array"
+        },
+        "warnings": {
+          "description": "扫描过程中产生的告警信息，按时间顺序排列。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dataset_id",
+        "dataset_version",
+        "generated_at",
+        "row_count",
+        "sampling",
+        "fields"
+      ],
+      "title": "DatasetSummary",
+      "type": "object"
+    },
+    "EncodingPatch": {
+      "additionalProperties": false,
+      "description": "针对 ChartSpec 的增量编码变更。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "target_chart_id": {
+          "description": "需要应用补丁的图表 ID。",
+          "minLength": 1,
+          "title": "Target Chart Id",
+          "type": "string"
+        },
+        "ops": {
+          "description": "补丁操作集合，按顺序执行。",
+          "items": {
+            "$ref": "#/$defs/EncodingPatchOp"
+          },
+          "minItems": 1,
+          "title": "Ops",
+          "type": "array"
+        },
+        "rationale": {
+          "description": "提出该补丁的原因说明。",
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_chart_id",
+        "ops",
+        "rationale"
+      ],
+      "title": "EncodingPatch",
+      "type": "object"
+    },
+    "EncodingPatchOp": {
+      "additionalProperties": false,
+      "description": "单个编码补丁操作。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "op_type": {
+          "description": "操作类型。",
+          "enum": [
+            "add",
+            "remove",
+            "replace"
+          ],
+          "title": "Op Type",
+          "type": "string"
+        },
+        "path": {
+          "description": "指向编码对象的路径，按层级拆分。",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Path",
+          "type": "array"
+        },
+        "value": {
+          "default": null,
+          "description": "在 add/replace 操作中写入的具体值。",
+          "title": "Value"
+        }
+      },
+      "required": [
+        "op_type",
+        "path"
+      ],
+      "title": "EncodingPatchOp",
+      "type": "object"
+    },
+    "ExplainOutline": {
+      "additionalProperties": false,
+      "description": "解释 Agent 的提纲，用于指导 Markdown 产出。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "bullets": {
+          "description": "建议解释内容的要点列表。",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Bullets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "bullets"
+      ],
+      "title": "ExplainOutline",
+      "type": "object"
+    },
+    "FieldPlanItem": {
+      "additionalProperties": false,
+      "description": "字段规划条目，描述字段角色与操作建议。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "field_name": {
+          "description": "字段名称。",
+          "minLength": 1,
+          "title": "Field Name",
+          "type": "string"
+        },
+        "semantic_role": {
+          "description": "字段在本计划中的语义角色。",
+          "enum": [
+            "dimension",
+            "measure",
+            "temporal",
+            "identifier"
+          ],
+          "title": "Semantic Role",
+          "type": "string"
+        },
+        "priority": {
+          "description": "推荐优先级，数值越小越靠前。",
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "rationale": {
+          "description": "选择该字段的理由。",
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "operations": {
+          "description": "针对该字段的派生或变换建议。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Operations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "field_name",
+        "semantic_role",
+        "priority",
+        "rationale"
+      ],
+      "title": "FieldPlanItem",
+      "type": "object"
+    },
+    "FieldSchema": {
+      "additionalProperties": false,
+      "description": "字段契约描述。\n\n每个字段契约都需要明确数据类型、语义角色以及可视化所需的补充信息。\n该模型既被数据扫描服务使用，也被图表模板、规划与执行模块共用。",
+      "properties": {
+        "name": {
+          "description": "字段的原始名称。",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "description": "字段在嵌套结构中的访问路径，按层级排列。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Path",
+          "type": "array"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "面向用户展示的字段标题，可选。",
+          "title": "Title"
+        },
+        "data_type": {
+          "description": "字段的基础数据类型。",
+          "enum": [
+            "integer",
+            "number",
+            "boolean",
+            "string",
+            "datetime"
+          ],
+          "title": "Data Type",
+          "type": "string"
+        },
+        "semantic_type": {
+          "description": "字段的语义类型，用于图表推荐与校验。",
+          "enum": [
+            "dimension",
+            "measure",
+            "temporal",
+            "identifier",
+            "geo",
+            "unknown"
+          ],
+          "title": "Semantic Type",
+          "type": "string"
+        },
+        "nullable": {
+          "description": "字段是否允许缺失值。",
+          "title": "Nullable",
+          "type": "boolean"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "字段的度量单位，例如 USD、% 等。",
+          "title": "Unit"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "字段的业务描述，用于提示与文档。",
+          "title": "Description"
+        },
+        "tags": {
+          "description": "与字段相关的标签集合，可用于检索。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "sample_values": {
+          "description": "可展示给用户的示例取值列表，按字符串形式存储。",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Sample Values",
+          "type": "array"
+        },
+        "value_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "字段的值域信息。"
+        },
+        "statistics": {
+          "$ref": "#/$defs/FieldStatistics",
+          "description": "字段的统计信息，用于质量与推荐。"
+        },
+        "temporal_granularity_candidates": {
+          "description": "若字段语义为时间，则给出支持的时间粒度候选集合。",
+          "items": {
+            "enum": [
+              "second",
+              "minute",
+              "hour",
+              "day",
+              "week",
+              "month",
+              "quarter",
+              "year"
+            ],
+            "type": "string"
+          },
+          "title": "Temporal Granularity Candidates",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "data_type",
+        "semantic_type",
+        "nullable",
+        "statistics"
+      ],
+      "title": "FieldSchema",
+      "type": "object"
+    },
+    "FieldStatistics": {
+      "additionalProperties": false,
+      "description": "字段的基础统计指标。\n\n该模型聚焦于用于可视化和质量监控的核心指标，不参与任何隐式推断。\n缺失率与唯一值计数均需通过数据扫描流程显式计算并写入。所有比率\n均在 ``[0, 1]`` 范围内，使用浮点数并保留中间精度。",
+      "properties": {
+        "total_count": {
+          "description": "扫描窗口内的记录总数，要求为非负整数。",
+          "minimum": 0,
+          "title": "Total Count",
+          "type": "integer"
+        },
+        "missing_count": {
+          "description": "缺失值数量，必须小于等于 total_count。",
+          "minimum": 0,
+          "title": "Missing Count",
+          "type": "integer"
+        },
+        "distinct_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "唯一值数量，适用于类别或标识字段。",
+          "title": "Distinct Count"
+        },
+        "missing_ratio": {
+          "description": "缺失率，范围为 [0, 1]。",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Missing Ratio",
+          "type": "number"
+        },
+        "entropy": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "离散字段的信息熵，用于辅助排序和推荐。",
+          "title": "Entropy"
+        }
+      },
+      "required": [
+        "total_count",
+        "missing_count",
+        "missing_ratio"
+      ],
+      "title": "FieldStatistics",
+      "type": "object"
+    },
+    "OutputMetrics": {
+      "additionalProperties": false,
+      "description": "变换执行后的指标数据，用于 SLO 与审计。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "duration_ms": {
+          "description": "执行耗时（毫秒）。",
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "rows_in": {
+          "description": "输入行数。",
+          "minimum": 0,
+          "title": "Rows In",
+          "type": "integer"
+        },
+        "rows_out": {
+          "description": "输出行数。",
+          "minimum": 0,
+          "title": "Rows Out",
+          "type": "integer"
+        },
+        "retry_count": {
+          "description": "执行过程中触发的重试次数。",
+          "minimum": 0,
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "row_limit_applied": {
+          "description": "是否命中行数限制。",
+          "title": "Row Limit Applied",
+          "type": "boolean"
+        },
+        "abort_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "若执行提前结束或失败，此处记录原因。",
+          "title": "Abort Reason"
+        }
+      },
+      "required": [
+        "duration_ms",
+        "rows_in",
+        "rows_out",
+        "retry_count",
+        "row_limit_applied"
+      ],
+      "title": "OutputMetrics",
+      "type": "object"
+    },
+    "OutputTable": {
+      "additionalProperties": false,
+      "description": "数据变换输出的表格快照。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "output_table_id": {
+          "description": "输出表唯一标识。",
+          "minLength": 1,
+          "title": "Output Table Id",
+          "type": "string"
+        },
+        "prepared_table_id": {
+          "description": "关联的 PreparedTable 标识。",
+          "minLength": 1,
+          "title": "Prepared Table Id",
+          "type": "string"
+        },
+        "schema": {
+          "description": "输出表的列结构。",
+          "items": {
+            "$ref": "#/$defs/TableColumn"
+          },
+          "minItems": 1,
+          "title": "Schema",
+          "type": "array"
+        },
+        "preview": {
+          "$ref": "#/$defs/TableSample",
+          "description": "输出数据的样本视图。"
+        },
+        "metrics": {
+          "$ref": "#/$defs/OutputMetrics",
+          "description": "执行后的指标数据。"
+        },
+        "logs": {
+          "description": "执行过程中的日志集合。",
+          "items": {
+            "$ref": "#/$defs/TransformLog"
+          },
+          "title": "Logs",
+          "type": "array"
+        },
+        "generated_at": {
+          "description": "输出表生成时间（UTC）。",
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "output_table_id",
+        "prepared_table_id",
+        "schema",
+        "preview",
+        "metrics",
+        "generated_at"
+      ],
+      "title": "OutputTable",
+      "type": "object"
+    },
+    "Plan": {
+      "additionalProperties": false,
+      "description": "统一的计划契约，连接意图与图表交付。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "plan_id": {
+          "description": "计划唯一标识。",
+          "format": "uuid",
+          "title": "Plan Id",
+          "type": "string"
+        },
+        "task_id": {
+          "description": "所属任务 ID。",
+          "minLength": 1,
+          "title": "Task Id",
+          "type": "string"
+        },
+        "dataset_id": {
+          "description": "计划关联的数据集 ID。",
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "refined_goal": {
+          "description": "模型澄清后的目标描述。",
+          "minLength": 1,
+          "title": "Refined Goal",
+          "type": "string"
+        },
+        "generated_at": {
+          "description": "计划生成时间（UTC）。",
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "assumptions": {
+          "description": "规划过程显式依赖的假设集合。",
+          "items": {
+            "$ref": "#/$defs/PlanAssumption"
+          },
+          "minItems": 1,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "field_plan": {
+          "description": "字段规划明细。",
+          "items": {
+            "$ref": "#/$defs/FieldPlanItem"
+          },
+          "minItems": 1,
+          "title": "Field Plan",
+          "type": "array"
+        },
+        "chart_plan": {
+          "description": "图表候选明细。",
+          "items": {
+            "$ref": "#/$defs/ChartPlanItem"
+          },
+          "minItems": 1,
+          "title": "Chart Plan",
+          "type": "array"
+        },
+        "transform_drafts": {
+          "description": "需要执行的数据变换草案列表。",
+          "items": {
+            "$ref": "#/$defs/TransformDraft"
+          },
+          "minItems": 1,
+          "title": "Transform Drafts",
+          "type": "array"
+        },
+        "explain_outline": {
+          "$ref": "#/$defs/ExplainOutline",
+          "description": "解释 Agent 参考的提纲。"
+        }
+      },
+      "required": [
+        "plan_id",
+        "task_id",
+        "dataset_id",
+        "refined_goal",
+        "generated_at",
+        "assumptions",
+        "field_plan",
+        "chart_plan",
+        "transform_drafts",
+        "explain_outline"
+      ],
+      "title": "Plan",
+      "type": "object"
+    },
+    "PlanAssumption": {
+      "additionalProperties": false,
+      "description": "规划过程中显式声明的假设与约束。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "statement": {
+          "description": "假设的文本描述。",
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        },
+        "confidence": {
+          "description": "假设成立的置信度，范围 [0, 1]。",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "impact": {
+          "description": "假设失效对计划的影响等级。",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Impact",
+          "type": "string"
+        }
+      },
+      "required": [
+        "statement",
+        "confidence",
+        "impact"
+      ],
+      "title": "PlanAssumption",
+      "type": "object"
+    },
+    "PreparedTable": {
+      "additionalProperties": false,
+      "description": "变换执行前的准备上下文，描述输入与约束。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "prepared_table_id": {
+          "description": "准备阶段输出的唯一标识。",
+          "minLength": 1,
+          "title": "Prepared Table Id",
+          "type": "string"
+        },
+        "source_id": {
+          "description": "源数据标识，用于追踪血缘。",
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "transform_id": {
+          "description": "计划中引用的变换 ID。",
+          "minLength": 1,
+          "title": "Transform Id",
+          "type": "string"
+        },
+        "schema": {
+          "description": "输入数据的列结构。",
+          "items": {
+            "$ref": "#/$defs/TableColumn"
+          },
+          "minItems": 1,
+          "title": "Schema",
+          "type": "array"
+        },
+        "sample": {
+          "$ref": "#/$defs/TableSample",
+          "description": "输入数据的摘样结果。"
+        },
+        "stats": {
+          "$ref": "#/$defs/PreparedTableStats",
+          "description": "输入数据的统计特征。"
+        },
+        "limits": {
+          "$ref": "#/$defs/PreparedTableLimits",
+          "description": "执行约束条件。"
+        }
+      },
+      "required": [
+        "prepared_table_id",
+        "source_id",
+        "transform_id",
+        "schema",
+        "sample",
+        "stats",
+        "limits"
+      ],
+      "title": "PreparedTable",
+      "type": "object"
+    },
+    "PreparedTableLimits": {
+      "additionalProperties": false,
+      "description": "执行前的限制条件，用于保障资源消耗。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "row_limit": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "单次执行允许处理的最大行数，None 表示无限制。",
+          "title": "Row Limit"
+        },
+        "timeout_ms": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "执行允许的最长耗时（毫秒）。",
+          "title": "Timeout Ms"
+        },
+        "sample_limit": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "采样用于回放的最大行数。",
+          "title": "Sample Limit"
+        }
+      },
+      "title": "PreparedTableLimits",
+      "type": "object"
+    },
+    "PreparedTableStats": {
+      "additionalProperties": false,
+      "description": "变换执行前的统计信息，用于限制与审计。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "row_count": {
+          "description": "输入数据的行数估计。",
+          "minimum": 0,
+          "title": "Row Count",
+          "type": "integer"
+        },
+        "estimated_bytes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "输入数据的估算体积（字节）。",
+          "title": "Estimated Bytes"
+        },
+        "distinct_row_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "唯一行数估计，用于去重评估。",
+          "title": "Distinct Row Count"
+        }
+      },
+      "required": [
+        "row_count"
+      ],
+      "title": "PreparedTableStats",
+      "type": "object"
+    },
+    "RecommendationList": {
+      "additionalProperties": false,
+      "description": "一次推荐请求产出的候选集合。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "task_id": {
+          "description": "关联的任务标识。",
+          "minLength": 1,
+          "title": "Task Id",
+          "type": "string"
+        },
+        "dataset_id": {
+          "description": "推荐所基于的数据集 ID。",
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "generated_at": {
+          "description": "UTC 时间的生成时间。",
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "recommendations": {
+          "description": "候选集合，按置信度排序。",
+          "items": {
+            "$ref": "#/$defs/ChartRecommendationCandidate"
+          },
+          "minItems": 1,
+          "title": "Recommendations",
+          "type": "array"
+        },
+        "surprise_pool": {
+          "description": "可用于“给我惊喜”按钮的指令候选集合。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Surprise Pool",
+          "type": "array"
+        }
+      },
+      "required": [
+        "task_id",
+        "dataset_id",
+        "generated_at",
+        "recommendations"
+      ],
+      "title": "RecommendationList",
+      "type": "object"
+    },
+    "SpanEvent": {
+      "additionalProperties": false,
+      "description": "Span 生命周期内的离散事件记录。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "event_type": {
+          "description": "事件类型。",
+          "enum": [
+            "start",
+            "cache_hit",
+            "retry",
+            "abort",
+            "fallback",
+            "emit_partial",
+            "success"
+          ],
+          "title": "Event Type",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "事件发生时间（UTC）。",
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "事件附带的信息。",
+          "title": "Detail"
+        }
+      },
+      "required": [
+        "event_type",
+        "timestamp"
+      ],
+      "title": "SpanEvent",
+      "type": "object"
+    },
+    "SpanMetrics": {
+      "additionalProperties": false,
+      "description": "节点执行的指标快照。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "duration_ms": {
+          "description": "节点执行耗时（毫秒）。",
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "retry_count": {
+          "description": "节点已经发生的重试次数。",
+          "minimum": 0,
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "rows_in": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "输入行数，缺失表示未记录。",
+          "title": "Rows In"
+        },
+        "rows_out": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "输出行数，缺失表示未记录。",
+          "title": "Rows Out"
+        }
+      },
+      "required": [
+        "duration_ms",
+        "retry_count"
+      ],
+      "title": "SpanMetrics",
+      "type": "object"
+    },
+    "SpanSLO": {
+      "additionalProperties": false,
+      "description": "定义单个节点的服务目标。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "max_duration_ms": {
+          "description": "节点允许的最大耗时（毫秒）。",
+          "minimum": 0,
+          "title": "Max Duration Ms",
+          "type": "integer"
+        },
+        "max_retries": {
+          "description": "节点允许的最大重试次数。",
+          "minimum": 0,
+          "title": "Max Retries",
+          "type": "integer"
+        },
+        "failure_isolation_required": {
+          "description": "节点失败时是否必须防止级联影响。",
+          "title": "Failure Isolation Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "max_duration_ms",
+        "max_retries",
+        "failure_isolation_required"
+      ],
+      "title": "SpanSLO",
+      "type": "object"
+    },
+    "TableColumn": {
+      "additionalProperties": false,
+      "description": "描述变换产出表的单列表结构。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "column_name": {
+          "description": "列名称。",
+          "minLength": 1,
+          "title": "Column Name",
+          "type": "string"
+        },
+        "data_type": {
+          "description": "列的数据类型描述，例如 integer、number。",
+          "minLength": 1,
+          "title": "Data Type",
+          "type": "string"
+        },
+        "semantic_role": {
+          "description": "列的语义角色，用于下游建模，例如 measure、dimension。",
+          "minLength": 1,
+          "title": "Semantic Role",
+          "type": "string"
+        },
+        "nullable": {
+          "description": "是否允许缺失值。",
+          "title": "Nullable",
+          "type": "boolean"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "列的补充说明或业务含义。",
+          "title": "Description"
+        }
+      },
+      "required": [
+        "column_name",
+        "data_type",
+        "semantic_role",
+        "nullable"
+      ],
+      "title": "TableColumn",
+      "type": "object"
+    },
+    "TableSample": {
+      "additionalProperties": false,
+      "description": "表样本，提供可回放的示例行集合。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "rows": {
+          "description": "样本行集合，所有值序列化为字符串。",
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "maxItems": 50,
+          "title": "Rows",
+          "type": "array"
+        }
+      },
+      "title": "TableSample",
+      "type": "object"
+    },
+    "TraceRecord": {
+      "additionalProperties": false,
+      "description": "任务级 Trace 记录。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "trace_id": {
+          "description": "Trace 唯一标识。",
+          "minLength": 1,
+          "title": "Trace Id",
+          "type": "string"
+        },
+        "task_id": {
+          "description": "任务标识。",
+          "minLength": 1,
+          "title": "Task Id",
+          "type": "string"
+        },
+        "dataset_id": {
+          "description": "关联数据集 ID。",
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "created_at": {
+          "description": "Trace 创建时间（UTC）。",
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "spans": {
+          "description": "按执行顺序排列的 Span 列表。",
+          "items": {
+            "$ref": "#/$defs/TraceSpan"
+          },
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        }
+      },
+      "required": [
+        "trace_id",
+        "task_id",
+        "dataset_id",
+        "created_at",
+        "spans"
+      ],
+      "title": "TraceRecord",
+      "type": "object"
+    },
+    "TraceSpan": {
+      "additionalProperties": false,
+      "description": "Trace 树中的单个 Span。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "span_id": {
+          "description": "Span 唯一标识。",
+          "minLength": 1,
+          "title": "Span Id",
+          "type": "string"
+        },
+        "parent_span_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "父 Span 标识，根节点为空。",
+          "title": "Parent Span Id"
+        },
+        "operation": {
+          "description": "状态图节点名称，建议遵循动词.名词格式，例如 data.scan。",
+          "minLength": 1,
+          "title": "Operation",
+          "type": "string"
+        },
+        "agent_name": {
+          "description": "执行该节点的 Agent 名称。",
+          "minLength": 1,
+          "title": "Agent Name",
+          "type": "string"
+        },
+        "status": {
+          "description": "节点执行状态。",
+          "enum": [
+            "success",
+            "failed",
+            "aborted"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "started_at": {
+          "description": "Span 开始时间（UTC）。",
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "slo": {
+          "$ref": "#/$defs/SpanSLO",
+          "description": "节点目标值。"
+        },
+        "metrics": {
+          "$ref": "#/$defs/SpanMetrics",
+          "description": "节点执行指标。"
+        },
+        "model_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "调用的模型名称，非模型节点为空。",
+          "title": "Model Name"
+        },
+        "prompt_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "提示词版本标识，非模型节点为空。",
+          "title": "Prompt Version"
+        },
+        "dataset_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "输入数据集的哈希摘要，用于回放一致性校验。",
+          "title": "Dataset Hash"
+        },
+        "schema_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "运行时契约 Schema 版本，便于迁移。",
+          "title": "Schema Version"
+        },
+        "abort_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "若状态为 aborted，则记录终止原因。",
+          "title": "Abort Reason"
+        },
+        "error_class": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "失败时的错误分类。",
+          "title": "Error Class"
+        },
+        "fallback_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "触发后备策略时记录所走的分支。",
+          "title": "Fallback Path"
+        },
+        "sse_seq": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "若通过 SSE 推送，该 Span 对应的序号。",
+          "title": "Sse Seq"
+        },
+        "events": {
+          "description": "Span 生命周期内发生的事件集合。",
+          "items": {
+            "$ref": "#/$defs/SpanEvent"
+          },
+          "title": "Events",
+          "type": "array"
+        }
+      },
+      "required": [
+        "span_id",
+        "operation",
+        "agent_name",
+        "status",
+        "started_at",
+        "slo",
+        "metrics"
+      ],
+      "title": "TraceSpan",
+      "type": "object"
+    },
+    "TransformDraft": {
+      "additionalProperties": false,
+      "description": "计划中的数据变换草案。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "transform_id": {
+          "description": "变换草案唯一标识。",
+          "format": "uuid",
+          "title": "Transform Id",
+          "type": "string"
+        },
+        "language": {
+          "description": "变换草案使用的语言。",
+          "enum": [
+            "python",
+            "sql"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "code": {
+          "description": "可执行的代码片段。",
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "output_table": {
+          "description": "预期输出表的标识。",
+          "minLength": 1,
+          "title": "Output Table",
+          "type": "string"
+        },
+        "intent_summary": {
+          "description": "代码对应的业务意图说明。",
+          "minLength": 1,
+          "title": "Intent Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "transform_id",
+        "language",
+        "code",
+        "output_table",
+        "intent_summary"
+      ],
+      "title": "TransformDraft",
+      "type": "object"
+    },
+    "TransformLog": {
+      "additionalProperties": false,
+      "description": "变换执行过程中的日志记录。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "level": {
+          "description": "日志级别。",
+          "minLength": 1,
+          "title": "Level",
+          "type": "string"
+        },
+        "message": {
+          "description": "日志内容。",
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "UTC 时间的日志时间戳。",
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "message",
+        "timestamp"
+      ],
+      "title": "TransformLog",
+      "type": "object"
+    },
+    "ValueRange": {
+      "additionalProperties": false,
+      "description": "字段的值域信息。\n\n该模型既服务于数值字段，也服务于分类型字段，用以约束可视化和\n质量检测阶段的边界条件。对于数值字段，使用 ``minimum`` 与 ``maximum``\n描述上下界；对于类别字段，则通过 ``categories`` 与 ``top_k_frequencies``\n列出受控的取值集合及其频次。所有取值均应基于 UTC 时间窗口内计算。",
+      "properties": {
+        "minimum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "字段在扫描窗口内的最小值，仅适用于数值字段。",
+          "title": "Minimum"
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "字段在扫描窗口内的最大值，仅适用于数值字段。",
+          "title": "Maximum"
+        },
+        "categories": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "按频次降序排列的类别取值列表，仅适用于类别字段。",
+          "title": "Categories"
+        },
+        "top_k_frequencies": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "与 categories 对应的频次列表，用于前端显示 Top-K。",
+          "title": "Top K Frequencies"
+        }
+      },
+      "title": "ValueRange",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "封装一次分析会话的完整上下文，支持离线回放。",
+  "properties": {
+    "x-spec-version": {
+      "default": "2.0.0",
+      "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+      "title": "X-Spec-Version",
+      "type": "string"
+    },
+    "bundle_id": {
+      "description": "会话包唯一标识。",
+      "minLength": 1,
+      "title": "Bundle Id",
+      "type": "string"
+    },
+    "task_id": {
+      "description": "关联的任务 ID。",
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "mode": {
+      "description": "打包模式，full 表示包含所有资产。",
+      "enum": [
+        "full",
+        "read_only"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "generated_at": {
+      "description": "包生成时间（UTC）。",
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "dataset_profile": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DatasetProfile"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "可选的数据集画像，用于离线回放。"
+    },
+    "plan": {
+      "$ref": "#/$defs/Plan",
+      "description": "最终的分析计划。"
+    },
+    "prepared_table": {
+      "$ref": "#/$defs/PreparedTable",
+      "description": "清理后的 PreparedTable 快照。"
+    },
+    "output_table": {
+      "$ref": "#/$defs/OutputTable",
+      "description": "清理后的输出表快照。"
+    },
+    "chart_specs": {
+      "description": "会话涉及的图表集合，首个元素为当前展示图。",
+      "items": {
+        "$ref": "#/$defs/ChartSpec"
+      },
+      "minItems": 1,
+      "title": "Chart Specs",
+      "type": "array"
+    },
+    "encoding_patches": {
+      "description": "应用过的编码补丁历史。",
+      "items": {
+        "$ref": "#/$defs/EncodingPatch"
+      },
+      "title": "Encoding Patches",
+      "type": "array"
+    },
+    "recommendations": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RecommendationList"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "对应的推荐集合，便于恢复多视图。"
+    },
+    "trace": {
+      "$ref": "#/$defs/TraceRecord",
+      "description": "Trace 记录，用于回放链路。"
+    },
+    "notes": {
+      "description": "导出过程中的补充说明或降级原因。",
+      "items": {
+        "type": "string"
+      },
+      "title": "Notes",
+      "type": "array"
+    },
+    "data_fingerprints": {
+      "description": "数据引用指纹列表，包含 dataset_id/version/hash 等信息。",
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Data Fingerprints",
+      "type": "array"
+    }
+  },
+  "required": [
+    "bundle_id",
+    "task_id",
+    "mode",
+    "generated_at",
+    "plan",
+    "prepared_table",
+    "output_table",
+    "chart_specs",
+    "trace"
+  ],
+  "title": "SessionBundle",
+  "type": "object",
+  "$id": "https://schemas.data-interface.local/contracts/session_bundle.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "2.0.0"
+}

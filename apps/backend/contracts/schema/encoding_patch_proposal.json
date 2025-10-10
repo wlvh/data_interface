@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "EncodingPatch": {
+      "additionalProperties": false,
+      "description": "针对 ChartSpec 的增量编码变更。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "target_chart_id": {
+          "description": "需要应用补丁的图表 ID。",
+          "minLength": 1,
+          "title": "Target Chart Id",
+          "type": "string"
+        },
+        "ops": {
+          "description": "补丁操作集合，按顺序执行。",
+          "items": {
+            "$ref": "#/$defs/EncodingPatchOp"
+          },
+          "minItems": 1,
+          "title": "Ops",
+          "type": "array"
+        },
+        "rationale": {
+          "description": "提出该补丁的原因说明。",
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_chart_id",
+        "ops",
+        "rationale"
+      ],
+      "title": "EncodingPatch",
+      "type": "object"
+    },
+    "EncodingPatchOp": {
+      "additionalProperties": false,
+      "description": "单个编码补丁操作。",
+      "properties": {
+        "x-spec-version": {
+          "default": "2.0.0",
+          "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+          "title": "X-Spec-Version",
+          "type": "string"
+        },
+        "op_type": {
+          "description": "操作类型。",
+          "enum": [
+            "add",
+            "remove",
+            "replace"
+          ],
+          "title": "Op Type",
+          "type": "string"
+        },
+        "path": {
+          "description": "指向编码对象的路径，按层级拆分。",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Path",
+          "type": "array"
+        },
+        "value": {
+          "default": null,
+          "description": "在 add/replace 操作中写入的具体值。",
+          "title": "Value"
+        }
+      },
+      "required": [
+        "op_type",
+        "path"
+      ],
+      "title": "EncodingPatchOp",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "对编码补丁的候选方案，带有置信度与摘要说明。",
+  "properties": {
+    "x-spec-version": {
+      "default": "2.0.0",
+      "description": "契约对象对应的 Schema 版本号，用于离线回放与迁移。",
+      "title": "X-Spec-Version",
+      "type": "string"
+    },
+    "proposal_id": {
+      "description": "候选补丁的唯一标识。",
+      "minLength": 1,
+      "title": "Proposal Id",
+      "type": "string"
+    },
+    "patch": {
+      "$ref": "#/$defs/EncodingPatch",
+      "description": "建议应用的编码补丁。"
+    },
+    "confidence": {
+      "description": "补丁建议的可信度，范围 [0, 1]。",
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "summary": {
+      "description": "针对该补丁的简要说明。",
+      "minLength": 1,
+      "title": "Summary",
+      "type": "string"
+    }
+  },
+  "required": [
+    "proposal_id",
+    "patch",
+    "confidence",
+    "summary"
+  ],
+  "title": "EncodingPatchProposal",
+  "type": "object",
+  "$id": "https://schemas.data-interface.local/contracts/encoding_patch_proposal.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "2.0.0"
+}

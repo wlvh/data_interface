@@ -8,9 +8,11 @@ from apps.backend.compat import BaseModel, ConfigDict, Field, model_validator
 
 from apps.backend.contracts.chart_spec import ChartSpec
 from apps.backend.contracts.dataset_profile import DatasetProfile, DatasetSummary
-from apps.backend.contracts.encoding_patch import EncodingPatch
+from apps.backend.contracts.encoding_patch import EncodingPatch, EncodingPatchProposal
 from apps.backend.contracts.explanation import ExplanationArtifact
 from apps.backend.contracts.plan import Plan
+from apps.backend.contracts.recommendation import RecommendationList
+from apps.backend.contracts.session_bundle import SessionBundle
 from apps.backend.contracts.transform import OutputTable, PreparedTable
 from apps.backend.contracts.trace import TraceRecord
 
@@ -70,6 +72,7 @@ class PlanResponse(ApiModel):
     output_table: OutputTable = Field(description="主要输出表快照。")
     chart: ChartSpec = Field(description="推荐图表规范。")
     encoding_patch: EncodingPatch = Field(description="图表编码的增量补丁。")
+    recommendations: RecommendationList = Field(description="同批次生成的推荐列表。")
     explanation: ExplanationArtifact = Field(description="解释 Agent 输出。")
     trace: TraceRecord = Field(description="Trace 记录。")
 
@@ -132,6 +135,7 @@ class TaskResultPayload(ApiModel):
     output_table: OutputTable = Field(description="变换产出的数据表。")
     chart: ChartSpec = Field(description="推荐图表规范。")
     encoding_patch: EncodingPatch = Field(description="图表编码补丁。")
+    recommendations: RecommendationList = Field(description="推荐候选集合。")
     explanation: ExplanationArtifact = Field(description="解释 Agent 输出。")
     trace: TraceRecord = Field(description="完整的 Trace 记录。")
 
@@ -227,7 +231,7 @@ class ChartRecommendRequest(ApiModel):
 class ChartRecommendResponse(ApiModel):
     """图表推荐响应。"""
 
-    chart_spec: ChartSpec = Field(description="推荐的图表规范。")
+    recommendations: RecommendationList = Field(description="推荐候选列表。")
     trace: TraceRecord = Field(description="推荐过程的 Trace。")
 
 
@@ -235,6 +239,7 @@ class NaturalEditRequest(ApiModel):
     """自然语言编辑请求。"""
 
     task_id: str = Field(description="任务标识。", min_length=1)
+    dataset_id: str = Field(description="数据集标识。", min_length=1)
     chart_spec: ChartSpec = Field(description="待编辑的原始图表。")
     nl_command: str = Field(description="自然语言编辑指令。", min_length=1)
 
@@ -242,7 +247,19 @@ class NaturalEditRequest(ApiModel):
 class NaturalEditResponse(ApiModel):
     """自然语言编辑响应。"""
 
-    encoding_patch: EncodingPatch = Field(description="生成的编码补丁。")
+    proposals: List[EncodingPatchProposal] = Field(
+        description="候选补丁集合，按置信度降序排列。",
+        json_schema_extra={"minItems": 1},
+    )
+    recommended_index: int = Field(
+        description="推荐采纳的候选索引。",
+        ge=0,
+    )
+    trace: TraceRecord = Field(description="自然语言编辑过程的 Trace。")
+    ambiguity_reason: Optional[str] = Field(
+        default=None,
+        description="若生成多候选，则记录歧义原因或提示。",
+    )
 
 
 class SchemaExportResponse(ApiModel):
@@ -250,3 +267,9 @@ class SchemaExportResponse(ApiModel):
 
     files: List[str] = Field(description="已落盘的 Schema 文件路径。")
     schemas: Dict[str, object] = Field(description="按 schema_name 索引的 JSONSchema 内容。")
+
+
+class SessionBundleResponse(ApiModel):
+    """会话包导出响应。"""
+
+    bundle: SessionBundle = Field(description="封装的会话包。")

@@ -15,7 +15,7 @@ from apps.backend.contracts.chart_spec import (
 )
 from apps.backend.contracts.chart_template import ChartEncoding, ChartTemplate
 from apps.backend.contracts.dataset_profile import DatasetProfile, DatasetSampling, DatasetSummary
-from apps.backend.contracts.encoding_patch import EncodingPatch, EncodingPatchOp
+from apps.backend.contracts.encoding_patch import EncodingPatch, EncodingPatchOp, EncodingPatchProposal
 from apps.backend.contracts.explanation import ExplanationArtifact
 from apps.backend.contracts.fields import FieldSchema, FieldStatistics, TemporalGranularity, ValueRange
 from apps.backend.contracts.plan import (
@@ -39,6 +39,8 @@ from apps.backend.contracts.transform import (
     TableSample,
     TransformLog,
 )
+from apps.backend.contracts.recommendation import ChartRecommendationCandidate, RecommendationList
+from apps.backend.contracts.session_bundle import SessionBundle
 
 __all__ = [
     "ChartEncoding",
@@ -54,6 +56,7 @@ __all__ = [
     "DatasetProfile",
     "EncodingPatch",
     "EncodingPatchOp",
+    "EncodingPatchProposal",
     "ExplanationArtifact",
     "FieldSchema",
     "FieldStatistics",
@@ -74,6 +77,9 @@ __all__ = [
     "OutputTable",
     "TransformLog",
     "Plan",
+    "RecommendationList",
+    "ChartRecommendationCandidate",
+    "SessionBundle",
     "SpanSLO",
     "SpanEvent",
     "SpanMetrics",

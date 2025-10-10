@@ -5,7 +5,8 @@ from apps.backend.agents.data_scan import DatasetScannerAgent, ScanPayload
 from apps.backend.agents.explain import ExplanationAgent, ExplanationPayload
 from apps.backend.agents.plan import PlanPayload, PlanRefinementAgent
 from apps.backend.agents.transform import TransformArtifacts, TransformExecutionAgent, TransformPayload
-from apps.backend.agents.chart import ChartPayload, ChartRecommendationAgent
+from apps.backend.agents.chart import ChartPayload, ChartRecommendationAgent, ChartRecommendationResult
+from apps.backend.agents.natural_edit import NaturalEditAgent, NaturalEditOutcome, NaturalEditPayload
 
 __all__ = [
     "Agent",
@@ -22,4 +23,8 @@ __all__ = [
     "TransformArtifacts",
     "ChartRecommendationAgent",
     "ChartPayload",
+    "ChartRecommendationResult",
+    "NaturalEditAgent",
+    "NaturalEditPayload",
+    "NaturalEditOutcome",
 ]
