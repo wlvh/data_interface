@@ -64,6 +64,8 @@ class SpanEvent(VersionedContractModel):
         "fallback",
         "emit_partial",
         "success",
+        "sample",
+        "pii_mask",
     ] = Field(description="事件类型。")
     timestamp: datetime = Field(description="事件发生时间（UTC）。")
     detail: Optional[str] = Field(

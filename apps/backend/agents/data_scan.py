@@ -230,7 +230,7 @@ class DatasetScannerAgent(Agent):
             operation="data.scan",
             agent_name=self.name,
             slo=self.slo,
-            parent_span_id=None,
+            parent_span_id=context.parent_span_id,
             model_name=None,
             prompt_version=None,
         )
@@ -282,6 +282,15 @@ class DatasetScannerAgent(Agent):
             dataset_hash=hash_digest,
             schema_version=SCHEMA_VERSION,
         )
+        context.trace_recorder.record_event(
+            span_id=span_id,
+            event_type="sample",
+            detail={
+                "strategy": summary.sampling.strategy,
+                "size": summary.sampling.size,
+                "seed": summary.sampling.seed,
+            },
+        )
         profile = DatasetProfile(
             dataset_id=payload.dataset_id,
             dataset_version=payload.dataset_version,
@@ -298,6 +307,10 @@ class DatasetScannerAgent(Agent):
             status="success",
             failure_category=None,
             failure_isolation_ratio=1.0,
+            status_detail={
+                "dataset_hash": hash_digest,
+                "row_count": row_count,
+            },
         )
         LOGGER.info(
             "数据扫描完成",

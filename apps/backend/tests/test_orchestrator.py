@@ -25,7 +25,7 @@ class DoublingAgent:
             operation=f"{self.name}.execute",
             agent_name=self.name,
             slo=self.slo,
-            parent_span_id=None,
+            parent_span_id=context.parent_span_id,
             model_name=None,
             prompt_version=None,
         )
@@ -85,4 +85,8 @@ def test_orchestrator_executes_nodes_in_order() -> None:
     result = orchestrator.run(context=context, shared_inputs={})
     assert result.outputs["first"] == 4
     assert result.outputs["second"] == 8
-    assert len(result.spans) == 2
+    assert len(result.spans) == 3
+    root_span = result.spans[0]
+    assert root_span.operation == "orchestrate.run"
+    child_parent_ids = {span.parent_span_id for span in result.spans[1:]}
+    assert child_parent_ids == {root_span.span_id}

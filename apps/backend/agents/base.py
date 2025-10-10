@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Optional, Protocol
 
 from apps.backend.contracts.trace import SpanSLO
 from apps.backend.infra.clock import UtcClock
@@ -18,6 +18,7 @@ class AgentContext:
     dataset_id: str
     trace_recorder: TraceRecorder
     clock: UtcClock
+    parent_span_id: Optional[str] = None
 
 
 @dataclass(frozen=True)

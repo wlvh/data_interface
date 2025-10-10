@@ -112,7 +112,7 @@ class TransformExecutionAgent(Agent):
             operation="transform.execute",
             agent_name=self.name,
             slo=self.slo,
-            parent_span_id=None,
+            parent_span_id=context.parent_span_id,
             model_name=None,
             prompt_version=None,
         )
@@ -189,6 +189,7 @@ class TransformExecutionAgent(Agent):
                 status="failed",
                 failure_category=error.__class__.__name__,
                 failure_isolation_ratio=0.0,
+                status_detail={"message": str(error)},
             )
             raise
         if not isinstance(result_df, pd.DataFrame):
@@ -239,11 +240,24 @@ class TransformExecutionAgent(Agent):
             span_id=span_id,
             rows_out=int(result_df.shape[0]),
         )
+        if output_table.metrics.row_limit_applied:
+            context.trace_recorder.record_event(
+                span_id=span_id,
+                event_type="emit_partial",
+                detail={
+                    "rows": output_table.metrics.rows_out,
+                    "limit": payload.sample_limit,
+                },
+            )
         trace_span = context.trace_recorder.finish_span(
             span_id=span_id,
             status="success",
             failure_category=None,
             failure_isolation_ratio=1.0,
+            status_detail={
+                "prepared_table": prepared_table.prepared_table_id,
+                "output_rows": output_table.metrics.rows_out,
+            },
         )
         LOGGER.info(
             "数据变换完成",

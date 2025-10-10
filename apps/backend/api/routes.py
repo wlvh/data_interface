@@ -47,6 +47,7 @@ from apps.backend.api.schemas import (
 )
 from apps.backend.contracts.chart_spec import ChartSpec
 from apps.backend.contracts.dataset_profile import DatasetProfile, DatasetSummary
+from apps.backend.contracts.metadata import SCHEMA_VERSION
 from apps.backend.contracts.encoding_patch import EncodingPatch, EncodingPatchOp
 from apps.backend.contracts.plan import Plan
 from apps.backend.contracts.task_event import TaskEvent
@@ -165,6 +166,37 @@ def _load_or_scan_profile(
         profile = outcome.output
         dataset_store.save(dataset_id=dataset_id, profile=profile)
         spans.append(outcome.trace_span)
+    else:
+        # 命中缓存时仍生成 data.scan Span，确保 Trace 可观测。
+        span_id = context.trace_recorder.start_span(
+            operation="data.scan",
+            agent_name=agents.scanner.name,
+            slo=agents.scanner.slo,
+            parent_span_id=context.parent_span_id,
+            model_name=None,
+            prompt_version=None,
+            start_detail={"source": "cache"},
+        )
+        context.trace_recorder.update_span(
+            span_id=span_id,
+            rows_in=profile.row_count,
+            rows_out=profile.row_count,
+            dataset_hash=profile.hash_digest,
+            schema_version=SCHEMA_VERSION,
+        )
+        context.trace_recorder.record_event(
+            span_id=span_id,
+            event_type="cache_hit",
+            detail={"reason": "dataset_store"},
+        )
+        cache_span = context.trace_recorder.finish_span(
+            span_id=span_id,
+            status="success",
+            failure_category=None,
+            failure_isolation_ratio=1.0,
+            status_detail={"source": "cache"},
+        )
+        spans.append(cache_span)
     return profile, spans
 
 

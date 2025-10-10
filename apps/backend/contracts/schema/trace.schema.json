@@ -19,7 +19,9 @@
             "abort",
             "fallback",
             "emit_partial",
-            "success"
+            "success",
+            "sample",
+            "pii_mask"
           ],
           "title": "Event Type",
           "type": "string"

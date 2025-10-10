@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from apps.backend.contracts.metadata import SCHEMA_VERSION
@@ -56,6 +57,21 @@ class TraceRecorder:
         self._clock = clock
         # 建立索引以便根据 span_id 快速定位。
         self._span_index: Dict[str, _SpanRuntime] = {}
+        self._root_span_id: Optional[str] = None
+
+    @staticmethod
+    def _serialize_detail(detail: Optional[Any]) -> Optional[str]:
+        """将事件细节序列化为 JSON 字符串。"""
+
+        if detail is None:
+            return None
+        if isinstance(detail, str):
+            return detail
+        try:
+            return json.dumps(detail, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+        except TypeError:
+            fallback = {"detail": str(detail)}
+            return json.dumps(fallback, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
 
     def start_span(
         self,
@@ -65,6 +81,7 @@ class TraceRecorder:
         parent_span_id: Optional[str],
         model_name: Optional[str],
         prompt_version: Optional[str],
+        start_detail: Optional[Any] = None,
     ) -> str:
         """创建新的 Span 并返回标识。
 
@@ -82,6 +99,8 @@ class TraceRecorder:
             如果调用模型则记录模型名称。
         prompt_version: Optional[str]
             模型提示词版本。
+        start_detail: Optional[Any]
+            若需要为 start 事件添加补充信息，则以可序列化对象给出。
 
         Returns
         -------
@@ -102,12 +121,47 @@ class TraceRecorder:
             started_at=started_at,
         )
         runtime.events.append(
-            SpanEvent(event_type="start", timestamp=started_at, detail=None),
+            SpanEvent(
+                event_type="start",
+                timestamp=started_at,
+                detail=self._serialize_detail(detail=start_detail),
+            ),
         )
         self._spans.append(runtime)
         self._span_index[span_id] = runtime
+        if parent_span_id is None and self._root_span_id is None:
+            self._root_span_id = span_id
         LOGGER.debug("Span started", extra={"span_id": span_id, "operation": operation})
         return span_id
+
+    def record_event(self, span_id: str, event_type: str, *, detail: Optional[Any] = None) -> None:
+        """为已有 Span 追加事件。
+
+        Parameters
+        ----------
+        span_id: str
+            目标 Span 的唯一标识。
+        event_type: str
+            事件类型，需符合既有约定。
+        detail: Optional[Any]
+            可选的事件附加信息，将被序列化为 JSON 字符串。
+        """
+
+        if span_id not in self._span_index:
+            message = f"span_id={span_id} 不存在，无法记录事件。"
+            raise KeyError(message)
+        runtime = self._span_index[span_id]
+        serialized = self._serialize_detail(detail=detail)
+        runtime.events.append(
+            SpanEvent(event_type=event_type, timestamp=self._clock.now(), detail=serialized),
+        )
+        LOGGER.debug(
+            "Span event recorded",
+            extra={
+                "span_id": span_id,
+                "event_type": event_type,
+            },
+        )
 
     def update_span(
         self,
@@ -176,9 +230,7 @@ class TraceRecorder:
             raise KeyError(message)
         runtime = self._span_index[span_id]
         runtime.retry_count += 1
-        runtime.events.append(
-            SpanEvent(event_type="retry", timestamp=self._clock.now(), detail=None),
-        )
+        self.record_event(span_id=span_id, event_type="retry", detail={"retry_count": runtime.retry_count})
         LOGGER.info(
             "Span retry recorded",
             extra={
@@ -193,6 +245,7 @@ class TraceRecorder:
         status: str,
         failure_category: Optional[str],
         failure_isolation_ratio: float,
+        status_detail: Optional[Any] = None,
     ) -> TraceSpan:
         """结束 Span 并返回对应的契约对象。
 
@@ -201,11 +254,13 @@ class TraceRecorder:
         span_id: str
             需要结束的 Span 标识。
         status: str
-            节点执行状态，仅接受 success 或 failed。
+            节点执行状态，仅接受 success/failed/aborted。
         failure_category: Optional[str]
             若失败则提供分类。
         failure_isolation_ratio: float
             失败隔离比例。
+        status_detail: Optional[Any]
+            追加的事件 detail 信息。
 
         Returns
         -------
@@ -233,8 +288,16 @@ class TraceRecorder:
         if status in {"failed", "aborted"}:
             runtime.error_class = failure_category
             event_type = "abort"
-            event_detail = failure_category or ""
+            detail_payload: Dict[str, Any] = {
+                "error_class": failure_category,
+                "abort_reason": runtime.abort_reason,
+            }
+            if status_detail is not None:
+                detail_payload["meta"] = status_detail
+            event_detail = self._serialize_detail(detail=detail_payload)
             runtime.abort_reason = failure_category or runtime.abort_reason
+        elif status_detail is not None:
+            event_detail = self._serialize_detail(detail=status_detail)
         runtime.events.append(
             SpanEvent(event_type=event_type, timestamp=completed_at, detail=event_detail),
         )
@@ -266,6 +329,11 @@ class TraceRecorder:
             },
         )
         return trace_span
+
+    def get_root_span_id(self) -> Optional[str]:
+        """返回首个根 Span 的标识，用于 SSE 对齐。"""
+
+        return self._root_span_id
 
     def build_trace(
         self,

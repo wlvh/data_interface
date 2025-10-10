@@ -47,7 +47,7 @@ class ChartRecommendationAgent(Agent):
             operation="chart.recommend",
             agent_name=self.name,
             slo=self.slo,
-            parent_span_id=None,
+            parent_span_id=context.parent_span_id,
             model_name=None,
             prompt_version=None,
         )
@@ -74,6 +74,10 @@ class ChartRecommendationAgent(Agent):
             status="success",
             failure_category=None,
             failure_isolation_ratio=1.0,
+            status_detail={
+                "template_id": candidate.template_id,
+                "engine": candidate.engine,
+            },
         )
         LOGGER.info(
             "图表推荐完成",
