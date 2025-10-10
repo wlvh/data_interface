@@ -10,7 +10,12 @@ import pytest
 
 from apps.backend.contracts.chart_template import ChartEncoding, ChartTemplate
 from apps.backend.contracts.dataset_profile import DatasetProfile, DatasetSummary
+from apps.backend.contracts.explanation import ExplanationArtifact
 from apps.backend.contracts.fields import FieldSchema, FieldStatistics, ValueRange
+from apps.backend.contracts.plan import Plan
+from apps.backend.contracts.chart_spec import ChartSpec
+from apps.backend.contracts.transform import OutputTable, TransformLog
+from apps.backend.contracts.trace import TraceRecord
 from pydantic import ValidationError
 
 
@@ -64,6 +69,54 @@ def test_chart_template_schema_matches_json() -> None:
 
     generated = _normalize_schema(ChartTemplate.model_json_schema())
     stored = _normalize_schema(_load_schema("chart_template.schema.json"))
+    assert generated == stored
+
+
+def test_plan_schema_matches_json() -> None:
+    """确保计划契约的 JSONSchema 与模型保持一致。"""
+
+    generated = _normalize_schema(Plan.model_json_schema())
+    stored = _normalize_schema(_load_schema("plan.schema.json"))
+    assert generated == stored
+
+
+def test_trace_schema_matches_json() -> None:
+    """确保 Trace 契约的 JSONSchema 与模型保持一致。"""
+
+    generated = _normalize_schema(TraceRecord.model_json_schema())
+    stored = _normalize_schema(_load_schema("trace.schema.json"))
+    assert generated == stored
+
+
+def test_explanation_schema_matches_json() -> None:
+    """确保解释契约的 JSONSchema 与模型保持一致。"""
+
+    generated = _normalize_schema(ExplanationArtifact.model_json_schema())
+    stored = _normalize_schema(_load_schema("explanation_artifact.json"))
+    assert generated == stored
+
+
+def test_output_table_schema_matches_json() -> None:
+    """确保输出表契约的 JSONSchema 与模型保持一致。"""
+
+    generated = _normalize_schema(OutputTable.model_json_schema())
+    stored = _normalize_schema(_load_schema("output_table.json"))
+    assert generated == stored
+
+
+def test_chart_spec_schema_matches_json() -> None:
+    """确保 ChartSpec 契约的 JSONSchema 与模型保持一致。"""
+
+    generated = _normalize_schema(ChartSpec.model_json_schema())
+    stored = _normalize_schema(_load_schema("chart_spec.json"))
+    assert generated == stored
+
+
+def test_transform_log_schema_matches_json() -> None:
+    """确保变换日志契约的 JSONSchema 与模型保持一致。"""
+
+    generated = _normalize_schema(TransformLog.model_json_schema())
+    stored = _normalize_schema(_load_schema("transform_log.schema.json"))
     assert generated == stored
 
 
@@ -302,4 +355,3 @@ def test_dataset_profile_success() -> None:
         profiling_notes=["扫描成功"],
     )
     assert profile.summary.dataset_id == "ds_1"
-
