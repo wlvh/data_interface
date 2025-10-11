@@ -38,6 +38,7 @@ from apps.backend.api.schemas import (
     ScanRequest,
     ScanResponse,
     TaskFailurePayload,
+    ChartStatePayload,
     TaskResultPayload,
     TaskResultResponse,
     TraceReplayRequest,
@@ -54,6 +55,10 @@ from apps.backend.api.schemas import (
     NaturalEditResponse,
     SchemaExportResponse,
     SessionBundleResponse,
+    ChartReplaceRequest,
+    ChartReplaceResponse,
+    ChartRevertRequest,
+    ChartRevertResponse,
 )
 from apps.backend.contracts.chart_spec import ChartSpec
 from apps.backend.contracts.dataset_profile import DatasetProfile, DatasetSummary
@@ -73,6 +78,7 @@ from apps.backend.contracts.transform import (
 )
 from apps.backend.infra.persistence import ApiRecorder
 from apps.backend.infra.tracing import TraceRecorder
+from apps.backend.services.chart_state import compute_chart_hash
 from apps.backend.services.pipeline import PipelineConfig, PipelineOutcome, execute_pipeline
 from apps.backend.services.session_bundle import build_session_bundle
 from apps.backend.services.task_runner import TaskRunner
@@ -396,6 +402,233 @@ def trigger_scan(
     return response
 
 
+@router.post("/api/chart/replace", response_model=ChartReplaceResponse)
+def replace_chart(
+    request: ChartReplaceRequest,
+    task_runner: TaskRunner = Depends(get_task_runner),
+    trace_store: TraceStore = Depends(get_trace_store),
+    clock=Depends(get_clock),
+    api_recorder: ApiRecorder = Depends(get_api_recorder),
+) -> ChartReplaceResponse:
+    """应用编码补丁并同步 Trace，保证所有图改动走统一入口。"""
+
+    endpoint = "api_chart_replace"
+    _record_request(api_recorder=api_recorder, endpoint=endpoint, payload=request)
+    try:
+        # 更新 TaskRunner 内部状态，并广播 SSE。
+        chart_state = task_runner.apply_patch(
+            task_id=request.task_id,
+            dataset_id=request.dataset_id,
+            patch=request.encoding_patch,
+        )
+        chart_hash = compute_chart_hash(chart_spec=chart_state.chart)
+        # 构造表示 UI 替换的 Span，追加到 Trace 记录中。
+        started_at = clock.now()
+        span = TraceSpan(
+            span_id=f"ui_replace_{uuid4()}",
+            parent_span_id=None,
+            operation="ui.replaceChart",
+            agent_name="ui.gateway",
+            status="success",
+            started_at=started_at,
+            slo=SpanSLO(
+                max_duration_ms=100,
+                max_retries=0,
+                failure_isolation_required=True,
+            ),
+            metrics=SpanMetrics(
+                duration_ms=0,
+                retry_count=0,
+                rows_in=None,
+                rows_out=None,
+            ),
+            model_name=None,
+            prompt_version=None,
+            dataset_hash=None,
+            schema_version=None,
+            abort_reason=None,
+            error_class=None,
+            fallback_path=None,
+            sse_seq=None,
+            events=[
+                SpanEvent(event_type="start", timestamp=started_at, detail="replace chart"),
+                SpanEvent(event_type="success", timestamp=started_at, detail=request.encoding_patch.rationale),
+            ],
+        )
+        try:
+            base_trace = trace_store.require(task_id=request.task_id)
+        except KeyError:
+            base_trace = None
+        trace = _append_span_to_trace(
+            base_trace=base_trace,
+            new_span=span,
+            task_id=request.task_id,
+            dataset_id=request.dataset_id,
+            clock=clock,
+        )
+        trace_store.save(trace=trace)
+        response = ChartReplaceResponse(
+            chart_spec=chart_state.chart,
+            chart_hash=chart_hash,
+            patch_history=list(chart_state.patch_history),
+            trace=trace,
+        )
+    except KeyError as error:
+        _record_error(
+            api_recorder=api_recorder,
+            endpoint=endpoint,
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    except ValueError as error:
+        _record_error(
+            api_recorder=api_recorder,
+            endpoint=endpoint,
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    except RuntimeError as error:
+        _record_error(
+            api_recorder=api_recorder,
+            endpoint=endpoint,
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+    except Exception as error:  # noqa: BLE001 - 记录未知异常并抛出
+        LOGGER.exception("图表替换失败", extra={"endpoint": endpoint})
+        _record_error(
+            api_recorder=api_recorder,
+            endpoint=endpoint,
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+        raise
+    _record_response(api_recorder=api_recorder, endpoint=endpoint, payload=response)
+    return response
+
+
+@router.post("/api/chart/revert", response_model=ChartRevertResponse)
+def revert_chart(
+    request: ChartRevertRequest,
+    task_runner: TaskRunner = Depends(get_task_runner),
+    trace_store: TraceStore = Depends(get_trace_store),
+    clock=Depends(get_clock),
+    api_recorder: ApiRecorder = Depends(get_api_recorder),
+) -> ChartRevertResponse:
+    """回退任务的最新补丁并刷新 Trace。"""
+
+    endpoint = "api_chart_revert"
+    _record_request(api_recorder=api_recorder, endpoint=endpoint, payload=request)
+    try:
+        chart_state = task_runner.revert_patch(
+            task_id=request.task_id,
+            dataset_id=request.dataset_id,
+            steps=request.steps,
+        )
+        chart_hash = compute_chart_hash(chart_spec=chart_state.chart)
+        started_at = clock.now()
+        span = TraceSpan(
+            span_id=f"ui_revert_{uuid4()}",
+            parent_span_id=None,
+            operation="ui.revertChart",
+            agent_name="ui.gateway",
+            status="success",
+            started_at=started_at,
+            slo=SpanSLO(
+                max_duration_ms=100,
+                max_retries=0,
+                failure_isolation_required=True,
+            ),
+            metrics=SpanMetrics(
+                duration_ms=0,
+                retry_count=0,
+                rows_in=None,
+                rows_out=None,
+            ),
+            model_name=None,
+            prompt_version=None,
+            dataset_hash=None,
+            schema_version=None,
+            abort_reason=None,
+            error_class=None,
+            fallback_path=None,
+            sse_seq=None,
+            events=[
+                SpanEvent(event_type="start", timestamp=started_at, detail="revert chart"),
+                SpanEvent(
+                    event_type="success",
+                    timestamp=started_at,
+                    detail=f"reverted {request.steps} step(s)",
+                ),
+            ],
+        )
+        try:
+            base_trace = trace_store.require(task_id=request.task_id)
+        except KeyError:
+            base_trace = None
+        trace = _append_span_to_trace(
+            base_trace=base_trace,
+            new_span=span,
+            task_id=request.task_id,
+            dataset_id=request.dataset_id,
+            clock=clock,
+        )
+        trace_store.save(trace=trace)
+        response = ChartRevertResponse(
+            chart_spec=chart_state.chart,
+            chart_hash=chart_hash,
+            patch_history=list(chart_state.patch_history),
+            reverted_steps=request.steps,
+            trace=trace,
+        )
+    except KeyError as error:
+        _record_error(
+            api_recorder=api_recorder,
+            endpoint=endpoint,
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    except ValueError as error:
+        _record_error(
+            api_recorder=api_recorder,
+            endpoint=endpoint,
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    except RuntimeError as error:
+        _record_error(
+            api_recorder=api_recorder,
+            endpoint=endpoint,
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+    except Exception as error:  # noqa: BLE001 - 统一捕获并上报
+        LOGGER.exception("图表回退失败", extra={"endpoint": endpoint})
+        _record_error(
+            api_recorder=api_recorder,
+            endpoint=endpoint,
+            error_type=error.__class__.__name__,
+            error_message=str(error),
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+        raise
+    _record_response(api_recorder=api_recorder, endpoint=endpoint, payload=response)
+    return response
+
+
 @router.post("/api/plan/refine", response_model=PlanResponse)
 def refine_plan(
     request: PlanRequest,
@@ -618,14 +851,29 @@ def fetch_task_result(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=message)
+            if snapshot.chart_state is None:
+                message = "任务缺少图表状态记录。"
+                _record_error(
+                    api_recorder=api_recorder,
+                    endpoint=endpoint,
+                    error_type="MissingChartStateError",
+                    error_message=message,
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=message)
+            chart_state = snapshot.chart_state
+            state_payload = ChartStatePayload(
+                chart_spec=chart_state.chart,
+                chart_hash=compute_chart_hash(chart_spec=chart_state.chart),
+                patch_history=list(chart_state.patch_history),
+            )
             result_payload = TaskResultPayload(
                 profile=outcome.profile,
                 plan=outcome.plan,
                 prepared_table=outcome.prepared_table,
                 output_table=outcome.output_table,
-                chart=outcome.chart,
+                chart_state=state_payload,
                 recommendations=outcome.recommendations,
-                encoding_patch=outcome.encoding_patch,
                 explanation=outcome.explanation,
                 trace=outcome.trace,
             )

@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from apps.backend.agents import AgentContext
 from apps.backend.agents.base import AgentOutcome
 from apps.backend.compat import model_dump
+from apps.backend.contracts.chart_spec import ChartSpec
+from apps.backend.contracts.encoding_patch import EncodingPatch
 from apps.backend.contracts.task_event import TaskEvent
 from apps.backend.infra.clock import UtcClock
 from apps.backend.infra.persistence import ApiRecorder
@@ -20,6 +22,7 @@ from apps.backend.services.pipeline import (
     execute_pipeline,
 )
 from apps.backend.infra.tracing import TraceRecorder
+from apps.backend.services.chart_state import compute_chart_hash, replay_patch_history
 from apps.backend.stores import DatasetStore, TraceStore
 
 
@@ -38,12 +41,22 @@ class TaskFailure:
 
 
 @dataclass(frozen=True)
+class ChartSessionState:
+    """记录图表初始状态、当前状态及补丁历史。"""
+
+    base_chart: ChartSpec
+    chart: ChartSpec
+    patch_history: Tuple[EncodingPatch, ...]
+
+
+@dataclass(frozen=True)
 class TaskSnapshot:
     """任务执行状态快照。"""
 
     status: str
     outcome: Optional[PipelineOutcome]
     failure: Optional[TaskFailure]
+    chart_state: Optional[ChartSessionState]
 
 
 class TaskRunner:
@@ -70,6 +83,7 @@ class TaskRunner:
         self._failures: Dict[str, TaskFailure] = {}
         self._trace_recorders: Dict[str, TraceRecorder] = {}
         self._event_sequence: Dict[str, int] = {}
+        self._chart_states: Dict[str, ChartSessionState] = {}
 
     async def submit_task(self, config: PipelineConfig) -> str:
         """提交任务并立即返回 task_id。"""
@@ -95,6 +109,7 @@ class TaskRunner:
         self._failures.pop(task_id, None)
         self._status[task_id] = "running"
         self._event_sequence[task_id] = 0
+        self._chart_states.pop(task_id, None)
 
         def progress_callback(node_name: str, outcome: AgentOutcome) -> None:
             span_dump = model_dump(outcome.trace_span)
@@ -203,6 +218,17 @@ class TaskRunner:
         self._failures.pop(task_id, None)
         self._trace_recorders.pop(task_id, None)
         self._event_sequence.pop(task_id, None)
+        # 初始化图表状态，记录 Pipeline 生成的首个编码补丁。
+        initial_history = (outcome.encoding_patch,)
+        hydrated_chart = replay_patch_history(
+            base_chart=outcome.chart,
+            patches=initial_history,
+        )
+        self._chart_states[task_id] = ChartSessionState(
+            base_chart=outcome.chart,
+            chart=hydrated_chart,
+            patch_history=initial_history,
+        )
         self._broadcast_event(
             task_id,
             event_type="completed",
@@ -225,6 +251,7 @@ class TaskRunner:
         self._results.pop(task_id, None)
         self._trace_recorders.pop(task_id, None)
         self._event_sequence.pop(task_id, None)
+        self._chart_states.pop(task_id, None)
         self._broadcast_event(
             task_id,
             event_type="failed",
@@ -264,11 +291,132 @@ class TaskRunner:
             if outcome is None:
                 message = f"task_id={task_id} 已完成但缺少结果。"
                 raise RuntimeError(message)
-            return TaskSnapshot(status=status, outcome=outcome, failure=None)
+            if task_id not in self._chart_states:
+                message = f"task_id={task_id} 缺少图表状态。"
+                raise RuntimeError(message)
+            chart_state = self._chart_states[task_id]
+            return TaskSnapshot(status=status, outcome=outcome, failure=None, chart_state=chart_state)
         if status == "failed":
             failure = self._failures.get(task_id)
             if failure is None:
                 message = f"task_id={task_id} 标记为失败但缺少错误信息。"
                 raise RuntimeError(message)
-            return TaskSnapshot(status=status, outcome=None, failure=failure)
-        return TaskSnapshot(status=status, outcome=None, failure=None)
+            return TaskSnapshot(status=status, outcome=None, failure=failure, chart_state=None)
+        return TaskSnapshot(status=status, outcome=None, failure=None, chart_state=None)
+
+    def apply_patch(self, *, task_id: str, dataset_id: str, patch: EncodingPatch) -> ChartSessionState:
+        """应用编码补丁并广播图表更新。"""
+
+        # 任务必须存在且已完成，未完成时前端不应触发替换。
+        if task_id not in self._status:
+            message = f"task_id={task_id} 不存在。"
+            raise KeyError(message)
+        if self._status[task_id] != "completed":
+            message = f"task_id={task_id} 未完成，无法应用补丁。"
+            raise ValueError(message)
+        # 读取原始 PipelineOutcome，校验数据集是否匹配，防止跨任务污染。
+        if task_id not in self._results:
+            message = f"task_id={task_id} 缺少执行结果。"
+            raise RuntimeError(message)
+        outcome = self._results[task_id]
+        if outcome.profile.dataset_id != dataset_id:
+            message = (
+                f"任务绑定的数据集 {outcome.profile.dataset_id} 与请求 {dataset_id} 不一致。"
+            )
+            raise ValueError(message)
+        # 获取当前图表状态，应用补丁并生成新的快照。
+        if task_id not in self._chart_states:
+            message = f"task_id={task_id} 缺少历史图表状态。"
+            raise RuntimeError(message)
+        current_state = self._chart_states[task_id]
+        new_history = current_state.patch_history + (patch,)
+        updated_chart = replay_patch_history(
+            base_chart=current_state.base_chart,
+            patches=new_history,
+        )
+        new_state = ChartSessionState(
+            base_chart=current_state.base_chart,
+            chart=updated_chart,
+            patch_history=new_history,
+        )
+        self._chart_states[task_id] = new_state
+        # 广播 SSE 事件，便于前端统一监听图表更新。
+        self._broadcast_event(
+            task_id,
+            event_type="chart_replaced",
+            payload={
+                "task_id": task_id,
+                "chart_hash": compute_chart_hash(chart_spec=updated_chart),
+            },
+        )
+        return new_state
+
+    def revert_patch(self, *, task_id: str, dataset_id: str, steps: int = 1) -> ChartSessionState:
+        """回退最近应用的编码补丁并广播状态更新。
+
+        Parameters
+        ----------
+        task_id: str
+            需要回退的任务标识。
+        dataset_id: str
+            用于校验的数据集标识。
+        steps: int
+            需要回退的补丁数量，至少为 1。
+
+        Returns
+        -------
+        ChartSessionState
+            回退后的最新图表状态。
+        """
+
+        if steps <= 0:
+            raise ValueError("steps 必须大于 0。")
+        if task_id not in self._status:
+            message = f"task_id={task_id} 不存在。"
+            raise KeyError(message)
+        if self._status[task_id] != "completed":
+            message = f"task_id={task_id} 未完成，无法回退补丁。"
+            raise ValueError(message)
+        if task_id not in self._results:
+            message = f"task_id={task_id} 缺少执行结果。"
+            raise RuntimeError(message)
+        outcome = self._results[task_id]
+        if outcome.profile.dataset_id != dataset_id:
+            message = f"任务绑定的数据集 {outcome.profile.dataset_id} 与请求 {dataset_id} 不一致。"
+            raise ValueError(message)
+        if task_id not in self._chart_states:
+            message = f"task_id={task_id} 缺少图表状态。"
+            raise RuntimeError(message)
+        current_state = self._chart_states[task_id]
+        if steps >= len(current_state.patch_history):
+            message = f"仅剩 {len(current_state.patch_history)} 个补丁，无法回退 {steps} 步。"
+            raise ValueError(message)
+        new_history = current_state.patch_history[:-steps]
+        reverted_chart = replay_patch_history(
+            base_chart=current_state.base_chart,
+            patches=new_history,
+        )
+        new_state = ChartSessionState(
+            base_chart=current_state.base_chart,
+            chart=reverted_chart,
+            patch_history=new_history,
+        )
+        self._chart_states[task_id] = new_state
+        self._broadcast_event(
+            task_id,
+            event_type="chart_reverted",
+            payload={
+                "task_id": task_id,
+                "chart_hash": compute_chart_hash(chart_spec=reverted_chart),
+                "reverted_steps": steps,
+            },
+        )
+        return new_state
+
+    def require_chart_state(self, *, task_id: str) -> ChartSessionState:
+        """返回指定任务的图表状态，若不存在则失败。"""
+
+        if task_id not in self._chart_states:
+            message = f"task_id={task_id} 缺少图表状态。"
+            raise KeyError(message)
+        return self._chart_states[task_id]

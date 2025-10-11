@@ -22,7 +22,7 @@ Data Interface 是一个面向多行业、多数据域的智能分析操作系�
 | --- | --- | --- |
 | `apps/backend/api/` | HTTP 接入与契约 | `app.py` 构建 FastAPI 应用；`routes.py` 汇集扫描、计划、变换、图表、任务、Trace 等端点并统一落盘审计；`dependencies.py` 管理依赖注入；`schemas.py` 定义所有请求/响应模型，保证 Pydantic 校验一致。 |
 | `apps/backend/agents/` | 原子智能能力 | 各 Agent 模块封装扫描、计划细化、变换执行、图表推荐、解释生成等能力，`base.py` 提供统一的 `Agent`/`AgentOutcome` 协议，并暴露 `AgentContext` 以承载 Trace 与任务信息。 |
-| `apps/backend/services/` | 流程编排与任务运行时 | `orchestrator.py` 实现 `StateMachineOrchestrator`，以状态图顺序驱动多 Agent；`pipeline.py` 定义 `PipelineConfig/Agents/Outcome` 以及 `execute_pipeline` 主流程；`task_runner.py` 提供异步线程池调度与 SSE 发布，向 `/api/task/*` 提供快照能力。 |
+| `apps/backend/services/` | 流程编排与任务运行时 | `orchestrator.py` 实现 `StateMachineOrchestrator`，以状态图顺序驱动多 Agent；`pipeline.py` 定义 `PipelineConfig/Agents/Outcome` 以及 `execute_pipeline` 主流程；`chart_state.py` 负责补丁应用与 ChartSpec 哈希；`task_runner.py` 提供异步线程池调度、SSE 发布与补丁历史管理。 |
 | `apps/backend/stores/` | 运行时缓存层 | `DatasetStore` 与 `TraceStore` 提供内存态缓存/回放入口，负责 Fail Fast 的读取与写入，后续可扩展至持久化后端。 |
 | `apps/backend/infra/` | 横切基础设施 | `clock.py` 提供 UTC 时钟抽象；`persistence.py` 封装 `ApiRecorder` 的落盘策略；`tracing.py` 定义 `TraceRecorder`，负责 Span 聚合与 Trace 重建。 |
 | `apps/backend/compat/` | Pydantic 兼容层 | 统一封装 `BaseModel`、`ConfigDict`、`model_validator`，屏蔽 v1/v2 差异，确保契约在不同运行环境下保持一致。 |
@@ -33,10 +33,12 @@ Data Interface 是一个面向多行业、多数据域的智能分析操作系�
 
 | 路径 | 责任焦点 | 关键说明 |
 | --- | --- | --- |
-| `apps/frontend/src/main.js` | 客户端入口 | Vite 启动脚本，待迁移至 TypeScript，同时挂载全局状态管理与调试工具。 |
-| `apps/frontend/src/contract/` | 前端契约镜像 | 临时维护前端对后端契约的 JS 版本（如 `schema.js`），后续将由自动生成流程替换。 |
-| `apps/frontend/src/runtime/` | 客户端运行时工具 | `dataProcessor.js` 等文件负责把后端 `ChartSpec`、`PreparedTable` 加工为前端可渲染结构，未来会接入统一的事件总线。 |
-| `apps/frontend/src/ui/` | UI 组件占位 | 预留交互组件与模板库目录，目前为迁移准备阶段。 |
+| `apps/frontend/src/main.tsx` | 客户端入口 | React + TypeScript 启动脚本，挂载 Redux Store 并渲染根组件。 |
+| `apps/frontend/src/app/` | 状态管理 | `store.ts` 配置 Redux；`chartSlice`、`taskSlice`、`naturalEditSlice`、`recommendationSlice` 管理图表与推荐状态。 |
+| `apps/frontend/src/api/` | 契约镜像与 API | `types.ts` 映射后端 Pydantic 模型，`client.ts` 封装 `fetchTaskResult`、`natural/edit`、`chart/replace` 等调用。 |
+| `apps/frontend/src/components/` | 交互组件 | `App.tsx` 组合布局；`NaturalEditPanel.tsx`、`ManualEditPanel.tsx`、`RecommendationPanel.tsx` 实现 NL、拖拽模拟与 Carousel/Gallery 双视图。 |
+| `apps/frontend/src/utils/` | 补丁工具 | `patch.ts` 生成 replaceChart 所需的全量/通道补丁。 |
+| `apps/frontend/src/styles.css` | 全局样式 | 定义卡片化布局、按钮与列表样式，保持双列布局与 100ms 内交互体验。 |
 | `apps/frontend/public/` | 静态资源 | favicon、开放路由静态文件等。 |
 
 ### 根目录与运行资产
@@ -51,6 +53,10 @@ Data Interface 是一个面向多行业、多数据域的智能分析操作系�
 | `tmp_runner.*` / `tmp_sample.csv` / `tmp_runner.log` | 本地实验产物 | 线程池执行、采样脚本的临时输出，便于追踪数据漂移或压测记录，清理前需确认是否进入审计体系。 |
 
 > 约定：新增模块前先定位所属目录并更新此表；若职责存在跨域依赖，必须同步补充 `AGENTS.md` 或根目录 TODO，避免架构漂移。
+
+## TODO
+
+- [ ] 将 `ChartSpec` 对接到 ECharts/vega 渲染层，消费 `/api/chart/replace` 返回的最新编码与数据采样。
 
 ## 核心流程（状态图视角）
 
@@ -85,9 +91,10 @@ npm run dev
 ### 契约校验
 
 ```bash
-cd apps/backend
-pytest
+uv run --python 3.13 pytest
 ```
+
+> 若受限于旧版 Python（3.9/3.8），需手动安装 `eval_type_backport` 或升级至 3.10+，否则 Pydantic 无法解析 `|` 联合类型。
 
 ### API 回放与审计
 

@@ -126,6 +126,20 @@ class TaskFailurePayload(ApiModel):
     error_message: str = Field(description="异常消息。", min_length=1)
 
 
+class ChartStatePayload(ApiModel):
+    """统一图表状态载荷，包含补丁历史与哈希值。"""
+
+    chart_spec: ChartSpec = Field(description="当前图表规范。")
+    chart_hash: str = Field(
+        description="ChartSpec 的哈希摘要，便于前端对比状态。",
+        min_length=1,
+    )
+    patch_history: List[EncodingPatch] = Field(
+        description="按时间顺序排列的补丁历史。",
+        json_schema_extra={"minItems": 1},
+    )
+
+
 class TaskResultPayload(ApiModel):
     """任务成功结果载荷。"""
 
@@ -133,8 +147,7 @@ class TaskResultPayload(ApiModel):
     plan: Plan = Field(description="最终计划。")
     prepared_table: PreparedTable = Field(description="变换输入快照。")
     output_table: OutputTable = Field(description="变换产出的数据表。")
-    chart: ChartSpec = Field(description="推荐图表规范。")
-    encoding_patch: EncodingPatch = Field(description="图表编码补丁。")
+    chart_state: ChartStatePayload = Field(description="当前图表状态及补丁历史。")
     recommendations: RecommendationList = Field(description="推荐候选集合。")
     explanation: ExplanationArtifact = Field(description="解释 Agent 输出。")
     trace: TraceRecord = Field(description="完整的 Trace 记录。")
@@ -233,6 +246,51 @@ class ChartRecommendResponse(ApiModel):
 
     recommendations: RecommendationList = Field(description="推荐候选列表。")
     trace: TraceRecord = Field(description="推荐过程的 Trace。")
+
+
+class ChartReplaceRequest(ApiModel):
+    """应用编码补丁的请求。"""
+
+    task_id: str = Field(description="任务标识。", min_length=1)
+    dataset_id: str = Field(description="数据集标识。", min_length=1)
+    encoding_patch: EncodingPatch = Field(description="需要应用的编码补丁。")
+
+
+class ChartReplaceResponse(ApiModel):
+    """图表替换操作的响应。"""
+
+    chart_spec: ChartSpec = Field(description="补丁应用后的图表规范。")
+    chart_hash: str = Field(description="更新后 ChartSpec 的哈希值。", min_length=1)
+    patch_history: List[EncodingPatch] = Field(
+        description="补丁历史，包含本次提交。",
+        json_schema_extra={"minItems": 1},
+    )
+    trace: TraceRecord = Field(description="追加 UI Span 后的 Trace。")
+
+
+class ChartRevertRequest(ApiModel):
+    """回退补丁的请求。"""
+
+    task_id: str = Field(description="任务标识。", min_length=1)
+    dataset_id: str = Field(description="数据集标识。", min_length=1)
+    steps: int = Field(
+        default=1,
+        description="回退的补丁数量，最小值为 1。",
+        ge=1,
+    )
+
+
+class ChartRevertResponse(ApiModel):
+    """补丁回退操作的响应。"""
+
+    chart_spec: ChartSpec = Field(description="回退后的图表规范。")
+    chart_hash: str = Field(description="当前 ChartSpec 的哈希值。", min_length=1)
+    patch_history: List[EncodingPatch] = Field(
+        description="回退后的补丁历史。",
+        json_schema_extra={"minItems": 1},
+    )
+    reverted_steps: int = Field(description="本次实际回退的补丁数量。", ge=1)
+    trace: TraceRecord = Field(description="包含回退 Span 的最新 Trace。")
 
 
 class NaturalEditRequest(ApiModel):

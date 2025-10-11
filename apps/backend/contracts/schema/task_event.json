@@ -14,7 +14,9 @@
         "started",
         "node_completed",
         "completed",
-        "failed"
+        "failed",
+        "chart_replaced",
+        "chart_reverted"
       ],
       "title": "Type",
       "type": "string"

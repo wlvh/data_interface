@@ -128,6 +128,7 @@ def execute_pipeline(
         return ChartPayload(
             plan=plan,
             table_id=artifacts.output_table.output_table_id,
+            row_count=artifacts.output_table.metrics.rows_out,
         )
 
     def build_explanation_payload(shared: dict[str, object]) -> ExplanationPayload:

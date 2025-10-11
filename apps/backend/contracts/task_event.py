@@ -32,7 +32,7 @@ class TaskEvent(VersionedContractModel):
 
         return "task_event"
 
-    type: Literal["started", "node_completed", "completed", "failed"] = Field(
+    type: Literal["started", "node_completed", "completed", "failed", "chart_replaced", "chart_reverted"] = Field(
         description="事件类型，覆盖任务全生命周期。"
     )
     ts: datetime = Field(description="事件生成时间（UTC）。")

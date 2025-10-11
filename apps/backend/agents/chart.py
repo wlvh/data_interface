@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List, Sequence
+from typing import List, Optional, Sequence
 from uuid import uuid4
 
 from apps.backend.agents.base import Agent, AgentContext, AgentOutcome
@@ -18,10 +18,21 @@ LOGGER = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ChartPayload:
-    """图表生成所需输入。"""
+    """图表生成所需输入。
+
+    Attributes
+    ----------
+    plan: Plan
+        规划阶段输出，用于指引编码与模板选择。
+    table_id: str
+        变换阶段产出的主输出表标识。
+    row_count: int
+        输出表的行数，用于稀疏检测与降级决策。
+    """
 
     plan: Plan
     table_id: str
+    row_count: int
 
 
 @dataclass(frozen=True)
@@ -76,6 +87,75 @@ def _clone_encoding(mappings: Sequence[ChartChannelMapping]) -> List[ChartChanne
         )
         for mapping in mappings
     ]
+
+
+def _detect_sparse(*, row_count: int, plan: Plan) -> bool:
+    """根据输出行数与字段规划判断是否需要降级。"""
+
+    if row_count <= 3:
+        return True
+    dimension_like = [
+        item for item in plan.field_plan if item.semantic_role in {"dimension", "temporal", "identifier"}
+    ]
+    if row_count <= len(dimension_like):
+        return True
+    return False
+
+
+def _build_fallback_candidates(*, plan: Plan, row_count: int) -> List[ChartPlanItem]:
+    """生成稀疏数据场景下的降级备选项。"""
+
+    dimensions = [
+        item for item in plan.field_plan if item.semantic_role in {"dimension", "temporal", "identifier"}
+    ]
+    measures = [item for item in plan.field_plan if item.semantic_role == "measure"]
+    candidates: List[ChartPlanItem] = []
+    metric_field = measures[0].field_name if measures else (dimensions[0].field_name if dimensions else plan.field_plan[0].field_name)
+    metric_agg = "avg" if measures else "count"
+    candidates.append(
+        ChartPlanItem(
+            template_id="metric_table",
+            engine="vega-lite",
+            confidence=0.45,
+            rationale=f"数据仅 {row_count} 行，优先展示关键指标。",
+            encoding=[
+                ChartChannelMapping(channel="metric", field_name=metric_field, aggregation=metric_agg),
+            ],
+            layout_hint=None,
+        ),
+    )
+    if dimensions and measures:
+        dimension_field = dimensions[0].field_name
+        measure_field = measures[0].field_name
+        candidates.append(
+            ChartPlanItem(
+                template_id="bar_basic",
+                engine="vega-lite",
+                confidence=0.4,
+                rationale=f"{dimension_field} → {measure_field} 聚合，突出稀疏样本趋势。",
+                encoding=[
+                    ChartChannelMapping(channel="x", field_name=dimension_field, aggregation="none"),
+                    ChartChannelMapping(channel="y", field_name=measure_field, aggregation="sum"),
+                ],
+                layout_hint=None,
+            ),
+        )
+    elif dimensions:
+        dimension_field = dimensions[0].field_name
+        candidates.append(
+            ChartPlanItem(
+                template_id="bar_basic",
+                engine="vega-lite",
+                confidence=0.35,
+                rationale=f"{dimension_field} 维度计数作为迷你图集视图。",
+                encoding=[
+                    ChartChannelMapping(channel="x", field_name=dimension_field, aggregation="none"),
+                    ChartChannelMapping(channel="y", field_name=dimension_field, aggregation="count"),
+                ],
+                layout_hint=None,
+            ),
+        )
+    return candidates
 
 
 def _build_chart_spec(
@@ -151,12 +231,33 @@ class ChartRecommendationAgent(Agent):
             prompt_version=None,
         )
         sorted_candidates = _sort_candidates(payload.plan.chart_plan)
-        if not sorted_candidates:
-            message = "计划缺少 chart_plan，无法生成图表。"
+        candidates: List[ChartPlanItem]
+        fallback_reason: Optional[str] = None
+        if not sorted_candidates or _detect_sparse(row_count=payload.row_count, plan=payload.plan):
+            fallback_candidates = _build_fallback_candidates(plan=payload.plan, row_count=payload.row_count)
+            if fallback_candidates:
+                candidates = fallback_candidates
+                fallback_reason = f"sparse_data(row_count={payload.row_count})"
+            else:
+                candidates = sorted_candidates
+        else:
+            candidates = sorted_candidates
+        if not candidates:
+            message = "缺少候选模板，无法生成图表。"
             raise ValueError(message)
+        if fallback_reason is not None:
+            context.trace_recorder.update_span(span_id=span_id, fallback_path=fallback_reason)
+            LOGGER.warning(
+                "触发稀疏数据降级",
+                extra={
+                    "task_id": context.task_id,
+                    "row_count": payload.row_count,
+                    "candidate_count": len(candidates),
+                },
+            )
         recommendation_entries: List[ChartRecommendationCandidate] = []
         chart_specs: List[ChartSpec] = []
-        for index, candidate in enumerate(sorted_candidates):
+        for index, candidate in enumerate(candidates):
             tags = _intent_tags(candidate.template_id)
             chart_spec = _build_chart_spec(
                 candidate=candidate,

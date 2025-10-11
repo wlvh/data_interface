@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import List, Optional, Sequence, Set, Tuple
 from uuid import uuid4
 
+from apps.backend.compat import model_dump
 from apps.backend.contracts.chart_spec import ChartSpec
 from apps.backend.contracts.dataset_profile import DatasetProfile
 from apps.backend.contracts.plan import Plan
-from apps.backend.contracts.recommendation import RecommendationList
+from apps.backend.contracts.recommendation import ChartRecommendationCandidate, RecommendationList
 from apps.backend.contracts.session_bundle import SessionBundle
 from apps.backend.contracts.transform import OutputTable, PreparedTable, TableColumn, TableSample
 from apps.backend.services.task_runner import TaskRunner
@@ -43,6 +44,7 @@ def _sanitize_prepared_table(
     """过滤 PreparedTable，仅保留被引用的列。"""
 
     filtered_columns = [column for column in table.schema if column.column_name in used_fields]
+    removed_columns = [column.column_name for column in table.schema if column.column_name not in used_fields]
     if not filtered_columns:
         note = "未找到引用字段，PreparedTable 保持原样导出。"
         return table, note, True
@@ -62,7 +64,10 @@ def _sanitize_prepared_table(
         stats=table.stats,
         limits=table.limits,
     )
-    return sanitized_table, None, False
+    note = None
+    if removed_columns:
+        note = f"PreparedTable 移除未引用列：{', '.join(removed_columns)}。"
+    return sanitized_table, note, False
 
 
 def _sanitize_output_table(
@@ -73,6 +78,7 @@ def _sanitize_output_table(
     """过滤 OutputTable 预览，移除未引用列。"""
 
     filtered_columns = [column for column in table.schema if column.column_name in used_fields]
+    removed_columns = [column.column_name for column in table.schema if column.column_name not in used_fields]
     if not filtered_columns:
         note = "未找到引用字段，OutputTable 保持原样导出。"
         return table, note, True
@@ -92,7 +98,10 @@ def _sanitize_output_table(
         logs=table.logs,
         generated_at=table.generated_at,
     )
-    return sanitized_table, None, False
+    note = None
+    if removed_columns:
+        note = f"OutputTable 移除未引用列：{', '.join(removed_columns)}。"
+    return sanitized_table, note, False
 
 
 def _build_chart_list(*, primary: ChartSpec, recommendations: RecommendationList) -> List[ChartSpec]:
@@ -133,12 +142,15 @@ def build_session_bundle(
         message = f"task_id={task_id} 缺少可导出的结果。"
         raise ValueError(message)
     trace = trace_store.require(task_id=task_id)
+    chart_state = task_runner.require_chart_state(task_id=task_id)
     try:
         profile = dataset_store.require(dataset_id=outcome.profile.dataset_id)
+        profile_missing = False
     except KeyError:
         profile = outcome.profile
+        profile_missing = True
     recommendations = outcome.recommendations
-    chart_specs = _build_chart_list(primary=outcome.chart, recommendations=recommendations)
+    chart_specs = _build_chart_list(primary=chart_state.chart, recommendations=recommendations)
     used_fields = _collect_used_fields(plan=outcome.plan, chart_specs=chart_specs)
     sanitized_prepared, prepared_note, prepared_degraded = _sanitize_prepared_table(
         table=outcome.prepared_table,
@@ -156,6 +168,39 @@ def build_session_bundle(
     if output_note is not None:
         notes.append(output_note)
         degraded = degraded or output_degraded
+    if profile_missing:
+        notes.append("DatasetStore 未命中画像，使用运行期快照生成只读包。")
+        degraded = True
+    valid_source = sanitized_output.output_table_id
+    supported_charts: List[ChartSpec] = []
+    removed_charts: List[str] = []
+    for spec in chart_specs:
+        if spec.data_source == valid_source:
+            supported_charts.append(spec)
+        else:
+            removed_charts.append(f"{spec.chart_id}→{spec.data_source}")
+    if not supported_charts:
+        supported_charts.append(chart_state.chart)
+    if removed_charts:
+        notes.append(f"移除引用未知数据源的图表：{', '.join(removed_charts)}。")
+        degraded = True
+    filtered_candidates: List[ChartRecommendationCandidate] = []
+    dropped_candidates: List[str] = []
+    for candidate in recommendations.recommendations:
+        if candidate.chart_spec.data_source == valid_source:
+            filtered_candidates.append(candidate)
+        else:
+            dropped_candidates.append(candidate.candidate_id)
+    effective_recommendations: Optional[RecommendationList] = recommendations
+    if dropped_candidates:
+        notes.append(f"移除引用未知数据源的候选：{', '.join(dropped_candidates)}。")
+        degraded = True
+        if filtered_candidates:
+            payload = model_dump(recommendations, mode="python")
+            payload["recommendations"] = [model_dump(item, mode="python") for item in filtered_candidates]
+            effective_recommendations = RecommendationList.model_validate(payload)
+        else:
+            effective_recommendations = None
     data_fingerprints = _build_data_fingerprints(profile=profile)
     bundle = SessionBundle(
         bundle_id=f"bundle_{uuid4()}",
@@ -166,9 +211,9 @@ def build_session_bundle(
         plan=outcome.plan,
         prepared_table=sanitized_prepared,
         output_table=sanitized_output,
-        chart_specs=chart_specs,
-        encoding_patches=[outcome.encoding_patch],
-        recommendations=recommendations,
+        chart_specs=supported_charts,
+        encoding_patches=list(chart_state.patch_history),
+        recommendations=effective_recommendations,
         trace=trace,
         notes=notes,
         data_fingerprints=data_fingerprints,

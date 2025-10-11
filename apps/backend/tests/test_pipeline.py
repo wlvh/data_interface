@@ -111,6 +111,10 @@ def test_execute_pipeline_returns_outcome(tmp_path: Path) -> None:
     assert outcome.encoding_patch.target_chart_id == outcome.chart.chart_id
     assert outcome.recommendations.recommendations
     assert outcome.trace.task_id == config.task_id
+    chart_spans = [span for span in outcome.spans if span.operation == "chart.recommend"]
+    assert chart_spans
+    expected_fallback = f"sparse_data(row_count={outcome.output_table.metrics.rows_out})"
+    assert chart_spans[0].fallback_path == expected_fallback
 
 
 def test_task_runner_streams_events(tmp_path: Path) -> None:
@@ -205,17 +209,24 @@ def test_task_result_endpoint_returns_snapshot(tmp_path: Path) -> None:
         assert response.status_code == 200
         payload = response.json()
         assert payload["status"] == "completed"
-        assert payload["result"]["plan"]["dataset_id"] == config.dataset_id
-        assert payload["result"]["output_table"]["metrics"]["rows_out"] >= 1
-        assert payload["result"]["encoding_patch"]["target_chart_id"] == payload["result"]["chart"]["chart_id"]
-        assert payload["result"]["recommendations"]["recommendations"]
-        first_candidate = payload["result"]["recommendations"]["recommendations"][0]
-        assert first_candidate["chart_spec"]["data_source"] == payload["result"]["output_table"]["output_table_id"]
-        assert payload["result"]["trace"]["task_id"] == task_id
+        result_payload = payload["result"]
+        assert result_payload["plan"]["dataset_id"] == config.dataset_id
+        assert result_payload["output_table"]["metrics"]["rows_out"] >= 1
+        chart_state_payload = result_payload["chart_state"]
+        assert chart_state_payload["chart_hash"]
+        assert len(chart_state_payload["patch_history"]) == 1
+        assert result_payload["recommendations"]["recommendations"]
+        first_candidate = result_payload["recommendations"]["recommendations"][0]
+        assert first_candidate["chart_spec"]["data_source"] == result_payload["output_table"]["output_table_id"]
+        assert result_payload["trace"]["task_id"] == task_id
+        chart_span = next(
+            span for span in result_payload["trace"]["spans"] if span["operation"] == "chart.recommend"
+        )
+        assert chart_span["fallback_path"].startswith("sparse_data")
         natural_payload = {
             "task_id": task_id,
             "dataset_id": config.dataset_id,
-            "chart_spec": payload["result"]["chart"],
+            "chart_spec": chart_state_payload["chart_spec"],
             "nl_command": "交换 x 和 y 轴",
         }
         natural_response = client.post("/api/natural/edit", json=natural_payload)
@@ -223,12 +234,45 @@ def test_task_result_endpoint_returns_snapshot(tmp_path: Path) -> None:
         natural_json = natural_response.json()
         assert natural_json["proposals"]
         assert natural_json["trace"]["task_id"] == task_id
+        patch_candidate = natural_json["proposals"][0]["patch"]
+        replace_payload = {
+            "task_id": task_id,
+            "dataset_id": config.dataset_id,
+            "encoding_patch": patch_candidate,
+        }
+        replace_response = client.post("/api/chart/replace", json=replace_payload)
+        assert replace_response.status_code == 200
+        replace_json = replace_response.json()
+        assert replace_json["chart_hash"]
+        assert len(replace_json["patch_history"]) == 2
+        assert replace_json["trace"]["task_id"] == task_id
+        refreshed = client.get(f"/api/task/{task_id}/result")
+        assert refreshed.status_code == 200
+        refreshed_state = refreshed.json()["result"]["chart_state"]
+        assert refreshed_state["chart_hash"] == replace_json["chart_hash"]
+        assert len(refreshed_state["patch_history"]) == 2
         session_response = client.get(f"/api/session/{task_id}/bundle")
         assert session_response.status_code == 200
         bundle_payload = session_response.json()["bundle"]
         assert bundle_payload["task_id"] == task_id
         assert bundle_payload["chart_specs"]
         assert bundle_payload["prepared_table"]
+        assert len(bundle_payload["encoding_patches"]) == 2
+        revert_payload = {
+            "task_id": task_id,
+            "dataset_id": config.dataset_id,
+        }
+        revert_response = client.post("/api/chart/revert", json=revert_payload)
+        assert revert_response.status_code == 200
+        revert_json = revert_response.json()
+        assert revert_json["reverted_steps"] == 1
+        assert len(revert_json["patch_history"]) == 1
+        second_revert = client.post("/api/chart/revert", json=revert_payload)
+        assert second_revert.status_code == 400
+        refreshed_after_revert = client.get(f"/api/task/{task_id}/result")
+        assert refreshed_after_revert.status_code == 200
+        reverted_state = refreshed_after_revert.json()["result"]["chart_state"]
+        assert len(reverted_state["patch_history"]) == 1
         app.dependency_overrides.clear()
 
     asyncio.run(_run())
